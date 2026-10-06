@@ -19,9 +19,11 @@ import { LeadsPage } from "./features/leads"
 
 import { useSessionLeads } from "./features/leads/hooks/useSessionLeads"
 
+import { useServiceHealth } from "./hooks/useServiceHealth"
+
 import Prism from "./Prism"
 
-import { LEAD_STATUSES } from "./types"
+import { LEAD_STATUSES, type SystemHealthResponse } from "./types"
 
 type ViewPage = "Dashboard" | "Discovery" | "Audits" | "Automation" | "Settings" | "Analytics"
 
@@ -29,16 +31,72 @@ type RoutePageProps = {
   page: ViewPage
 }
 
+function describeStatus(status: string) {
+  switch (status) {
+    case "CONNECTED":
+      return "Connected"
+    case "AVAILABLE":
+      return "Available"
+    case "CONFIGURED":
+      return "Configured"
+    case "NOT_CONFIGURED":
+      return "Not configured"
+    case "DEGRADED":
+      return "Degraded"
+    case "ERROR":
+      return "Error"
+    default:
+      return "Unknown"
+  }
+}
+
+function getSystemSummary(health: SystemHealthResponse | null | undefined) {
+  if (!health) {
+    return {
+      title: "API unavailable",
+      detail: "Unable to reach the Lead Intelligence backend.",
+      tone: "error" as const,
+    }
+  }
+
+  const coreServices = [health.services.api.status, health.services.database.status]
+  const connectedCore = coreServices.filter((status) => status === "CONNECTED").length
+
+  if (health.status === "healthy") {
+    return {
+      title: "System operational",
+      detail: `${connectedCore}/2 core services connected`,
+      tone: "ok" as const,
+    }
+  }
+
+  if (health.status === "degraded") {
+    return {
+      title: "System degraded",
+      detail: "API connected but one or more backend services need attention.",
+      tone: "warning" as const,
+    }
+  }
+
+  return {
+    title: "System unavailable",
+    detail: "The backend is not healthy enough to process intelligence jobs.",
+    tone: "error" as const,
+  }
+}
+
 function Sidebar({
   page,
   onNavigate,
   open,
   close,
+  health,
 }: {
   page: string
   onNavigate: (path: string) => void
   open: boolean
   close: () => void
+  health: SystemHealthResponse | null
 }) {
   const navigation = [
     {
@@ -151,10 +209,10 @@ function Sidebar({
         </div>
         <div className="sidebar-foot">
           <div className="system-status">
-            <span className="pulse" />
+            <span className={`pulse ${health && health.status === "healthy" ? "ok" : "warn"}`} />
             <div>
-              <strong>Frontend only</strong>
-              <small>No services connected</small>
+              <strong>{getSystemSummary(health).title}</strong>
+              <small>{getSystemSummary(health).detail}</small>
             </div>
           </div>
           <button className="profile">
@@ -239,9 +297,11 @@ function StatCard({
 function Dashboard({
   leads,
   navigate,
+  health,
 }: {
   leads: ReturnType<typeof useSessionLeads>["leads"]
   navigate: (path: string) => void
+  health: SystemHealthResponse | null
 }) {
   return (
     <div className="page">
@@ -336,18 +396,32 @@ function Dashboard({
         </section>
         <section className="panel">
           <SectionHeader title="Automation health" />
-          <EmptyState
-            title="Services not connected"
-            text="This frontend does not run automation engines."
-            icon="automation"
-          />
+          <div className="p-4 text-sm leading-7 text-[#d4d4d4]">
+            <p className="font-medium text-white">
+              {health?.services.n8n.status === "NOT_CONFIGURED"
+                ? "n8n not configured"
+                : describeStatus(health?.services.n8n.status ?? "UNKNOWN")}
+            </p>
+            <p>
+              Core API: {health ? describeStatus(health.services.api.status) : "Unknown"}
+            </p>
+            <p>
+              Digital intelligence: {health ? describeStatus(health.services.digitalIntelligence.status) : "Unknown"}
+            </p>
+            <p className="text-[#a5a5a5]">
+              No automated outreach is running unless it is explicitly implemented.
+            </p>
+          </div>
         </section>
       </div>
     </div>
   )
 }
 
-function WorkspacePage({ page }: RoutePageProps) {
+function WorkspacePage({
+  page,
+  health,
+}: RoutePageProps & { health: SystemHealthResponse | null }) {
   const descriptions: Record<ViewPage, string> = {
     Dashboard: "",
     Discovery: "Discover and enrich businesses from configured sources.",
@@ -384,7 +458,15 @@ function WorkspacePage({ page }: RoutePageProps) {
           <h1>{page}</h1>
           <p>{descriptions[page]}</p>
         </div>
-        <Badge>NOT CONNECTED</Badge>
+        <Badge>
+          {page === "Audits"
+            ? "AVAILABLE"
+            : page === "Discovery" || page === "Automation"
+              ? "NOT CONFIGURED"
+              : health && health.status === "healthy"
+                ? "CONNECTED"
+                : "LOCAL"}
+        </Badge>
       </div>
       <div className="lower-grid">
         {cards[page].map(([title, empty, icon]) => (
@@ -480,7 +562,7 @@ function AnalyticsPage() {
   )
 }
 
-function SettingsPage() {
+function SettingsPage({ health }: { health: SystemHealthResponse | null }) {
   const [section, setSection] = useState("General")
 
   const items = [
@@ -500,8 +582,8 @@ function SettingsPage() {
           <p className="eyebrow">CONFIGURATION</p>
           <h1>Settings</h1>
           <p>
-            Frontend-only workspace. No credentials, providers, or saved
-            configuration.
+            Local workspace settings are stored in the browser. Backend service
+            configuration is managed separately from the UI.
           </p>
         </div>
       </div>
@@ -556,6 +638,8 @@ function AppContent() {
 
   const leads = useSessionLeads()
 
+  const systemHealth = useServiceHealth()
+
   const [sidebarVisible, setSidebarVisible] = useState(
     () => window.matchMedia("(min-width: 901px)").matches,
   )
@@ -602,12 +686,19 @@ function AppContent() {
         </div>
         <div className="absolute inset-0 bg-black/40" />
       </div>
+      {systemHealth.error && !systemHealth.health && (
+        <div className="mx-4 mt-4 rounded border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-100">
+          <strong className="block">API unavailable</strong>
+          <span>Unable to reach the Lead Intelligence backend. Check that the API is running and VITE_API_BASE_URL is configured correctly.</span>
+        </div>
+      )}
       {sidebarVisible && (
         <Sidebar
           page={`/${route}`}
           onNavigate={navigate}
           open
           close={() => setSidebarVisible(false)}
+          health={systemHealth.health}
         />
       )}
       <main>
@@ -620,20 +711,20 @@ function AppContent() {
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route
             path="/dashboard"
-            element={<Dashboard leads={leads.leads} navigate={navigate} />}
+            element={<Dashboard leads={leads.leads} navigate={navigate} health={systemHealth.health} />}
           />
           <Route path="/leads" element={<LeadsPage />} />
           <Route
             path="/discovery"
-            element={<WorkspacePage page="Discovery" />}
+            element={<WorkspacePage page="Discovery" health={systemHealth.health} />}
           />
-          <Route path="/audits" element={<WorkspacePage page="Audits" />} />
+          <Route path="/audits" element={<WorkspacePage page="Audits" health={systemHealth.health} />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route
             path="/automation"
-            element={<WorkspacePage page="Automation" />}
+            element={<WorkspacePage page="Automation" health={systemHealth.health} />}
           />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={<SettingsPage health={systemHealth.health} />} />
           <Route
             path="*"
             element={

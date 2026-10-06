@@ -12,3 +12,5 @@ export {
 } from "./audit"
 
 export { createLead, getLead, getLeads, updateLead } from "./leads"
+
+export { getSystemHealth } from "./system"

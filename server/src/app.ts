@@ -12,6 +12,8 @@ import digitalIntelligenceRoutes from "./routes/digitalIntelligenceRoutes.js"
 
 import leadRoutes from "./routes/leadRoutes.js"
 
+import systemRoutes from "./routes/systemRoutes.js"
+
 const app = express()
 
 app.use(cors())
@@ -21,8 +23,15 @@ app.use(express.json())
 app.use(morgan("dev"))
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true, service: "lead-intelligence-api" })
+  res.json({
+    ok: true,
+    service: "lead-intelligence-api",
+    status: "healthy",
+    checkedAt: new Date().toISOString(),
+  })
 })
+
+app.use("/api/system", systemRoutes)
 
 app.use("/api", auditRoutes)
 
