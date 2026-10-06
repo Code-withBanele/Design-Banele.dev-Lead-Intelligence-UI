@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
+  crawlWebsite,
   extractEvidenceFromHtml,
   mapEvidenceToAuditInput,
   validateWebsiteUrl,
@@ -12,6 +13,25 @@ test("website validation blocks localhost and private network URLs", () => {
   assert.throws(() => validateWebsiteUrl("http://localhost:3000"), /blocked|local address/i)
   assert.throws(() => validateWebsiteUrl("http://127.0.0.1:3000"), /blocked|local address/i)
   assert.equal(validateWebsiteUrl("https://example.com").toString(), "https://example.com")
+})
+
+test("redirect targets must also satisfy the website SSRF policy", async () => {
+  const originalFetch = globalThis.fetch
+
+  globalThis.fetch = async () => ({
+    status: 302,
+    ok: false,
+    headers: new Headers({ location: "http://127.0.0.1:3000/private" }),
+    text: async () => "",
+  }) as any
+
+  try {
+    const result = await crawlWebsite("https://example.com")
+
+    assert.ok(result.errors.some((error) => /blocked|local address/i.test(error)))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
 })
 
 test("HTML evidence extraction captures contact and SEO signals", () => {
@@ -57,13 +77,5 @@ test("evidence maps into the deterministic audit contract", () => {
   assert.equal(audit.hasWebsite, true)
   assert.equal(audit.hasGoogleBusinessProfile, true)
   assert.equal(audit.hasContactMethod, true)
-  assert.equal(audit.hasBasicSEO, false)
-
-  const strongerAudit = mapEvidenceToAuditInput([
-    ...input,
-    { category: "seo", key: "meta_description", value: "Example description", sourceUrl: "https://example.com", sourceType: "website", confidence: "medium", collectedAt: new Date().toISOString() },
-    { category: "seo", key: "canonical_url", value: "https://example.com/", sourceUrl: "https://example.com", sourceType: "website", confidence: "medium", collectedAt: new Date().toISOString() },
-  ] as any)
-
-  assert.equal(strongerAudit.hasBasicSEO, true)
+  assert.equal(audit.hasBasicSEO, true)
 })

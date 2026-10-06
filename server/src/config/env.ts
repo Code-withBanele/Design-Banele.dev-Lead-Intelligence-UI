@@ -7,23 +7,29 @@ config({
 })
 
 export const env = {
-  port: Number(process.env.PORT ?? 4000),
+  get port() {
+    return Number(process.env.PORT ?? 4000)
+  },
 
-  supabaseUrl: process.env.SUPABASE_URL ?? "",
+  get supabaseUrl() {
+    return process.env.SUPABASE_URL ?? ""
+  },
 
-  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+  get supabaseServiceRoleKey() {
+    return process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""
+  },
 
-  openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
+  get openRouterApiKey() {
+    return process.env.OPENROUTER_API_KEY ?? ""
+  },
 
-  nodeEnv: process.env.NODE_ENV ?? "development",
-}
-
-export function hasSupabaseConfiguration() {
-  return Boolean(env.supabaseUrl && env.supabaseServiceRoleKey)
+  get nodeEnv() {
+    return process.env.NODE_ENV ?? "development"
+  },
 }
 
 export function requireServerEnv() {
-  if (!hasSupabaseConfiguration()) {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     throw new Error(
       "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.",
     )

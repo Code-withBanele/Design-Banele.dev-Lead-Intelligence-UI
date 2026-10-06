@@ -1,5 +1,5 @@
 import { env } from "../config/env.js"
-import { getSupabaseClient } from "../db/supabase.js"
+import { supabase } from "../db/supabase.js"
 
 export type ServiceHealthStatus =
   | "CONNECTED"
@@ -31,7 +31,6 @@ export type SystemHealthResponse = {
 
 export async function getSystemHealthStatus(): Promise<SystemHealthResponse> {
   const checkedAt = new Date().toISOString()
-
   const services: SystemHealthResponse["services"] = {
     api: {
       status: "CONNECTED",
@@ -54,8 +53,8 @@ export async function getSystemHealthStatus(): Promise<SystemHealthResponse> {
       detail: "Digital intelligence collection is available.",
     },
     ai: {
-      status: env.openRouterApiKey ? "CONFIGURED" : "NOT_CONFIGURED",
-      detail: env.openRouterApiKey
+      status: process.env.OPENROUTER_API_KEY ? "CONFIGURED" : "NOT_CONFIGURED",
+      detail: process.env.OPENROUTER_API_KEY
         ? "OpenRouter is configured for AI business analysis."
         : "OpenRouter credentials are not configured.",
     },
@@ -65,22 +64,11 @@ export async function getSystemHealthStatus(): Promise<SystemHealthResponse> {
     },
   }
 
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
-    services.database = {
-      status: "NOT_CONFIGURED",
-      detail: "Supabase environment variables are not configured.",
-    }
-
-    return {
-      status: "degraded",
-      services,
-      checkedAt,
-    }
-  }
-
   try {
-    const client = getSupabaseClient()
-    const { data, error } = await client.from("businesses").select("id").limit(1)
+    const { data, error } = await supabase
+      .from("businesses")
+      .select("id")
+      .limit(1)
 
     if (error) {
       services.database = {
@@ -104,6 +92,22 @@ export async function getSystemHealthStatus(): Promise<SystemHealthResponse> {
   const databaseOk = services.database.status === "CONNECTED"
   const apiOk = services.api.status === "CONNECTED"
   const hasOperationalCore = apiOk && databaseOk
+
+  const status: SystemHealthResponse["status"] =
+    !apiOk || !databaseOk ? "degraded" : "healthy"
+
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+    services.database = {
+      status: "ERROR",
+      detail: "Supabase environment variables are not configured.",
+    }
+
+    return {
+      status: "error",
+      services,
+      checkedAt,
+    }
+  }
 
   if (services.ai.status === "ERROR") {
     return {

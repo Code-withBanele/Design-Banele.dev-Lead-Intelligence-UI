@@ -1,73 +1,11 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
-import {
-  env,
-  hasSupabaseConfiguration,
-  requireServerEnv,
-} from "../config/env.js"
-
-function createMissingSupabaseClient(): SupabaseClient {
-  const throwMissingConfig = () => {
-    throw new Error(
-      "Supabase configuration is missing. Configure SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY before using database operations.",
-    )
-  }
-
-  const builder = () => ({
-    select: () => {
-      throwMissingConfig()
-    },
-    insert: () => {
-      throwMissingConfig()
-    },
-    update: () => {
-      throwMissingConfig()
-    },
-    delete: () => {
-      throwMissingConfig()
-    },
-    upsert: () => {
-      throwMissingConfig()
-    },
-    eq: () => {
-      throwMissingConfig()
-    },
-    order: () => {
-      throwMissingConfig()
-    },
-    limit: () => {
-      throwMissingConfig()
-    },
-    single: () => {
-      throwMissingConfig()
-    },
-    maybeSingle: () => {
-      throwMissingConfig()
-    },
-    range: () => {
-      throwMissingConfig()
-    },
-    csv: () => {
-      throwMissingConfig()
-    },
-    ilike: () => {
-      throwMissingConfig()
-    },
-    textSearch: () => {
-      throwMissingConfig()
-    },
-    then: undefined,
-  })
-
-  return {
-    from: () => builder(),
-  } as unknown as SupabaseClient
-}
+import { env, requireServerEnv } from "../config/env.js"
 
 let client: SupabaseClient | null = null
 
 export function getSupabaseClient(): SupabaseClient {
-  if (!hasSupabaseConfiguration()) {
+  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
     requireServerEnv()
   }
 
@@ -83,6 +21,10 @@ export function getSupabaseClient(): SupabaseClient {
   return client
 }
 
-export const supabase = hasSupabaseConfiguration()
-  ? getSupabaseClient()
-  : createMissingSupabaseClient()
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_target, property, receiver) {
+    const activeClient = getSupabaseClient()
+    const value = Reflect.get(activeClient, property, receiver)
+    return typeof value === "function" ? value.bind(activeClient) : value
+  },
+})
