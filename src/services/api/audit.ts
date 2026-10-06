@@ -4,6 +4,8 @@ import type {
   AiAnalysisRecord,
   DigitalAudit,
   DigitalAuditInput,
+  DigitalIntelligenceResult,
+  DigitalIntelligenceRun,
   OpportunityScoreResult,
 } from "@/types"
 
@@ -46,5 +48,21 @@ export async function createAiAnalysis(
 ): Promise<AiAnalysisRecord> {
   return fetchJson<AiAnalysisRecord>(`/leads/${leadId}/ai-analysis`, {
     method: "POST",
+  })
+}
+
+export async function getDigitalIntelligence(
+  leadId: string,
+): Promise<DigitalIntelligenceRun> {
+  return fetchJson<DigitalIntelligenceRun>(`/leads/${leadId}/digital-intelligence`)
+}
+
+export async function collectDigitalIntelligence(
+  leadId: string,
+  input: { website?: string; sourceUrl?: string } = {},
+): Promise<DigitalIntelligenceResult> {
+  return fetchJson<DigitalIntelligenceResult>(`/leads/${leadId}/digital-intelligence`, {
+    method: "POST",
+    body: JSON.stringify(input),
   })
 }

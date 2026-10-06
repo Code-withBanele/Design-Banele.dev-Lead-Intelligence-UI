@@ -2,12 +2,20 @@ import { useEffect, useState } from "react"
 
 import { Badge, Button, EmptyState, Icon } from "@/components/ui"
 
-import { getAiAnalysis, getLeadAudit, getOpportunityScore } from "@/services/api"
+import {
+  collectDigitalIntelligence,
+  getAiAnalysis,
+  getDigitalIntelligence,
+  getLeadAudit,
+  getOpportunityScore,
+} from "@/services/api"
 
 import {
   LEAD_STATUSES,
   type AiAnalysisRecord,
   type DigitalAudit,
+  type DigitalIntelligenceResult,
+  type DigitalIntelligenceRun,
   type OpportunityScoreResult,
 } from "@/types"
 
@@ -29,6 +37,15 @@ export function LeadPage() {
 
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisRecord | null>(null)
 
+  const [digitalIntelligence, setDigitalIntelligence] =
+    useState<DigitalIntelligenceRun | DigitalIntelligenceResult | null>(null)
+
+  const [websiteUrl, setWebsiteUrl] = useState("")
+
+  const [collectingDigital, setCollectingDigital] = useState(false)
+
+  const [digitalCollectionError, setDigitalCollectionError] = useState<string | null>(null)
+
   const {
     filteredLeads,
     currentPage: page,
@@ -43,24 +60,31 @@ export function LeadPage() {
       setAuditSummary(null)
       setOpportunityScore(null)
       setAiAnalysis(null)
+      setDigitalIntelligence(null)
+      setWebsiteUrl("")
       return
     }
 
+    setWebsiteUrl((current) => current || "https://")
+
     void (async () => {
       try {
-        const [audit, score, analysis] = await Promise.all([
+        const [audit, score, analysis, intelligence] = await Promise.all([
           getLeadAudit(lead.id).catch(() => null),
           getOpportunityScore(lead.id).catch(() => null),
           getAiAnalysis(lead.id).catch(() => null),
+          getDigitalIntelligence(lead.id).catch(() => null),
         ])
 
         setAuditSummary(audit)
         setOpportunityScore(score)
         setAiAnalysis(analysis)
+        setDigitalIntelligence(intelligence)
       } catch {
         setAuditSummary(null)
         setOpportunityScore(null)
         setAiAnalysis(null)
+        setDigitalIntelligence(null)
       }
     })()
   }, [visibleLeads])
@@ -137,6 +161,91 @@ export function LeadPage() {
           )}
         </section>
       ) : null}
+
+      {visibleLeads[0] && (
+        <section className="panel mb-4 p-4">
+          <div className="flex items-center justify-between gap-3 pb-3">
+            <div>
+              <p className="eyebrow">DIGITAL INTELLIGENCE</p>
+              <h2 className="text-xl font-semibold text-white">Evidence collector</h2>
+            </div>
+            {digitalIntelligence && (
+              <div className="rounded border border-[#303030] bg-[#111111] p-3 text-left">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+                  Status
+                </div>
+                <div className="mt-1 text-lg font-semibold text-white">
+                  {digitalIntelligence.status}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center">
+            <input
+              aria-label="Website URL"
+              className="w-full rounded border border-[#303030] bg-[#101010] px-3 py-2 text-sm text-white placeholder:text-[#6b7280]"
+              placeholder="https://example.com"
+              value={websiteUrl}
+              onChange={(event) => setWebsiteUrl(event.target.value)}
+            />
+            <button
+              type="button"
+              className="rounded border border-[#303030] bg-[#111111] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={collectingDigital || !websiteUrl.trim()}
+              onClick={async () => {
+                if (!visibleLeads[0]) return
+                try {
+                  setCollectingDigital(true)
+                  setDigitalCollectionError(null)
+                  const result = await collectDigitalIntelligence(visibleLeads[0].id, {
+                    website: websiteUrl,
+                  })
+                  setDigitalIntelligence(result)
+                } catch (error) {
+                  setDigitalCollectionError(
+                    error instanceof Error ? error.message : "Collection failed.",
+                  )
+                } finally {
+                  setCollectingDigital(false)
+                }
+              }}
+            >
+              {collectingDigital ? "Collecting..." : "Collect evidence"}
+            </button>
+          </div>
+          {digitalCollectionError && (
+            <div className="mb-3 rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+              {digitalCollectionError}
+            </div>
+          )}
+          {digitalIntelligence ? (
+            <div className="grid gap-3 text-sm text-[#d4d4d4] md:grid-cols-3">
+              <div className="rounded border border-[#222] bg-[#111111] p-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">Pages</div>
+                <div className="mt-1 text-xl font-semibold text-white">
+                  {digitalIntelligence.pagesCrawled}
+                </div>
+              </div>
+              <div className="rounded border border-[#222] bg-[#111111] p-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">Evidence</div>
+                <div className="mt-1 text-xl font-semibold text-white">
+                  {digitalIntelligence.evidenceCount}
+                </div>
+              </div>
+              <div className="rounded border border-[#222] bg-[#111111] p-3">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">Source</div>
+                <div className="mt-1 text-sm text-white">
+                  {digitalIntelligence.sourceUrl ?? "No source"}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-[#a5a5a5]">
+              No evidence has been collected for this lead yet.
+            </p>
+          )}
+        </section>
+      )}
 
       {aiAnalysis && (
         <section className="panel mb-4 p-4">

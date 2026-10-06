@@ -71,3 +71,56 @@ export type AiAnalysisRecord = {
   }
   createdAt: string
 }
+
+export type DigitalEvidenceSourceType = "website" | "google" | "social" | "external"
+
+export type DigitalEvidenceConfidence = "high" | "medium" | "low"
+
+export type DigitalEvidence = {
+  id?: string
+  leadId: string
+  runId?: string
+  category: string
+  key: string
+  value: unknown
+  sourceUrl?: string | null
+  sourceType: DigitalEvidenceSourceType
+  confidence: DigitalEvidenceConfidence
+  collectedAt: string
+  metadata?: Record<string, unknown>
+}
+
+export type DigitalIntelligenceStatus =
+  | "QUEUED"
+  | "RUNNING"
+  | "COMPLETED"
+  | "PARTIAL"
+  | "FAILED"
+
+export type DigitalIntelligenceRun = {
+  id: string
+  leadId: string
+  status: DigitalIntelligenceStatus
+  startedAt: string
+  completedAt: string | null
+  pagesCrawled: number
+  requestsMade: number
+  evidenceCount: number
+  errorCount: number
+  warnings: string[]
+  errorMessages: string[]
+  collectorVersion: string
+  sourceUrl?: string | null
+  evidence: DigitalEvidence[]
+}
+
+export type DigitalIntelligenceResult = DigitalIntelligenceRun & {
+  audit: Record<string, unknown>
+  score: {
+    score: number
+    classification: "LOW" | "MEDIUM" | "HIGH"
+    rulesetVersion: string
+    calculatedAt: string
+    contributingFactors: string[]
+  }
+}

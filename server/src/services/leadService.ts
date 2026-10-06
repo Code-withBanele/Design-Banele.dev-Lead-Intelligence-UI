@@ -173,17 +173,80 @@ export async function createLeadWithBusiness(input: LeadPayload) {
     status: input.status as any,
   })
 
-  const { data, error } = await supabase.rpc("create_lead_with_business", {
-    p_name: normalized.name,
+  const businessInsert = await supabase
+    .from("businesses")
+    .insert({
+      name: normalized.name,
+      industry: normalized.industry || null,
+      location: normalized.location || null,
+      status: "active",
+    })
+    .select("id, name, industry, location")
+    .single()
 
-    p_industry: normalized.industry || null,
+  if (businessInsert.error || !businessInsert.data) {
+    const message = businessInsert.error?.message ?? "Failed to create the business record."
 
-    p_location: normalized.location || null,
+    const serviceError = new Error(message) as Error & {
+      statusCode?: number
+      code?: string
+    }
 
-    p_status: normalized.status,
-  })
+    serviceError.statusCode = 500
+    serviceError.code = "LEAD_CREATE_FAILED"
 
-  if (error || !data || !Array.isArray(data) || data.length === 0) {
+    if (/Business name is required|Invalid lead status/i.test(message)) {
+      serviceError.statusCode = 400
+      serviceError.code = "INVALID_LEAD_INPUT"
+    }
+
+    throw serviceError
+  }
+
+  const { data, error } = await supabase
+    .from("leads")
+    .insert({
+      business_id: businessInsert.data.id,
+      status: normalized.status,
+      priority: "medium",
+      source: "manual",
+      opportunity_score: 0,
+      qualification_status: "unqualified",
+    })
+    .select(
+      `
+        id,
+        status,
+        priority,
+        source,
+        opportunity_score,
+        qualification_status,
+        first_contacted_at,
+        last_contacted_at,
+        next_follow_up_at,
+        created_at,
+        updated_at,
+        businesses (
+          id,
+          name,
+          description,
+          category,
+          industry,
+          location,
+          address,
+          latitude,
+          longitude,
+          phone,
+          email,
+          status,
+          created_at,
+          updated_at
+        )
+      `,
+    )
+    .single()
+
+  if (error || !data) {
     const message = error?.message ?? "Failed to create the lead record."
 
     const serviceError = new Error(message) as Error & {
@@ -202,39 +265,9 @@ export async function createLeadWithBusiness(input: LeadPayload) {
     throw serviceError
   }
 
-  const record = data[0]
+  const business = getBusinessRecord(data.businesses)
 
-  return {
-    id: record.id,
-
-    businessId: record.business_id,
-
-    name: record.business_name,
-
-    industry: record.business_industry ?? null,
-
-    location: record.business_location ?? null,
-
-    status: record.status,
-
-    priority: record.priority ?? null,
-
-    source: record.source ?? null,
-
-    opportunityScore: record.opportunity_score ?? null,
-
-    qualificationStatus: record.qualification_status ?? null,
-
-    firstContactedAt: record.first_contacted_at ?? null,
-
-    lastContactedAt: record.last_contacted_at ?? null,
-
-    nextFollowUpAt: record.next_follow_up_at ?? null,
-
-    createdAt: record.created_at,
-
-    updatedAt: record.updated_at,
-  }
+  return mapLead(data, business)
 }
 
 export async function updateLeadStatus(id: string, status: string) {

@@ -8,6 +8,8 @@ import aiRoutes from "./routes/aiRoutes.js"
 
 import auditRoutes from "./routes/auditRoutes.js"
 
+import digitalIntelligenceRoutes from "./routes/digitalIntelligenceRoutes.js"
+
 import leadRoutes from "./routes/leadRoutes.js"
 
 const app = express()
@@ -25,6 +27,8 @@ app.get("/health", (_req, res) => {
 app.use("/api", auditRoutes)
 
 app.use("/api", aiRoutes)
+
+app.use("/api", digitalIntelligenceRoutes)
 
 app.use("/api/leads", leadRoutes)
 
