@@ -1,28 +1,44 @@
 export const LEAD_STATUSES = [
   "NEW",
+
   "QUALIFIED",
+
   "AUDITED",
+
   "CONTACTED",
+
   "REPLIED",
+
   "MEETING",
+
   "PROPOSAL",
+
   "WON",
+
   "LOST",
+
   "ARCHIVED",
 ] as const
 
-export type LeadStatus = (typeof LEAD_STATUSES)[number]
+export type LeadStatus = typeof LEAD_STATUSES[number]
 
-export function isLeadStatus(value: unknown): value is LeadStatus {
-  return typeof value === "string" && LEAD_STATUSES.includes(value as LeadStatus)
+export type CreateLeadInput = {
+  name: string
+
+  industry?: string
+
+  location?: string
+
+  status?: LeadStatus
 }
 
-export function normalizeLeadInput(input: {
-  name: string
-  industry?: string
-  location?: string
-  status?: LeadStatus
-}) {
+export function isLeadStatus(value: unknown): value is LeadStatus {
+  return (
+    typeof value === "string" && LEAD_STATUSES.includes(value as LeadStatus)
+  )
+}
+
+export function normalizeLeadInput(input: CreateLeadInput) {
   const name = input.name.trim()
 
   if (!name) {
@@ -37,8 +53,11 @@ export function normalizeLeadInput(input: {
 
   return {
     name,
+
     industry: input.industry?.trim() || "",
+
     location: input.location?.trim() || "",
+
     status: normalizedStatus,
   }
 }

@@ -29,8 +29,8 @@ export function LeadPage() {
           <p className="eyebrow">CRM / LEADS</p>
           <h1>Lead intelligence</h1>
           <p>
-            Persisted records are loaded from the API. Status updates are synced to
-            the backend.
+            Persisted records are loaded from the API. Status updates are synced
+            to the backend.
           </p>
         </div>
         <Button icon="plus" onClick={() => setAdding(true)}>
@@ -126,7 +126,26 @@ export function LeadPage() {
                 <span>Not audited</span>
                 <span>—</span>
                 <span>Not scored</span>
-                <Badge>{lead.status}</Badge>
+                <label className="sr-only" htmlFor={`status-${lead.id}`}>
+                  Change lead status
+                </label>
+                <select
+                  id={`status-${lead.id}`}
+                  className="rounded border border-[#303030] bg-[#101010] p-2 text-xs text-white"
+                  value={lead.status}
+                  onChange={async (event) => {
+                    await sessionLeads.updateStatus(
+                      lead.id,
+                      event.target.value as typeof lead.status,
+                    )
+                  }}
+                >
+                  {LEAD_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
                 <span>—</span>
                 <span>Awaiting audit</span>
               </div>

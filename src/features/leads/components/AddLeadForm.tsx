@@ -83,7 +83,7 @@ export function AddLeadForm({
         ))}
         <div className="flex gap-3 md:col-span-3">
           <button className="button button-primary" type="submit">
-            Add to session
+            Add lead
           </button>
           <Button variant="secondary" onClick={onCancel}>
             Cancel

@@ -25,15 +25,39 @@ export type LeadStatus = typeof LEAD_STATUSES[number]
 export type Lead = {
   id: string
 
+  businessId: string
+
   name: string
 
-  industry: string
+  industry: string | null
 
-  location: string
+  location: string | null
 
   status: LeadStatus
+
+  priority: string | null
+
+  source: string | null
+
+  opportunityScore: number | null
+
+  qualificationStatus: string | null
+
+  createdAt: string
+
+  updatedAt: string
 }
 
-export type CreateLeadInput = Omit<Lead, "id">
+export type CreateLeadInput = {
+  name: string
 
-export type UpdateLeadInput = Partial<Lead>
+  industry?: string
+
+  location?: string
+
+  status?: LeadStatus
+}
+
+export type UpdateLeadInput = {
+  status: LeadStatus
+}

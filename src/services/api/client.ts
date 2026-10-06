@@ -1,4 +1,5 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000/api"
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000/api"
 
 export const apiClient = {
   baseUrl: API_BASE_URL,
@@ -21,8 +22,13 @@ export async function fetchJson<T>(
   })
 
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}))
-    throw new Error((payload as { message?: string }).message ?? "Request failed.")
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: { message?: string }
+      message?: string
+    }
+    const message =
+      payload.error?.message ?? payload.message ?? "Request failed."
+    throw new Error(message)
   }
 
   return (await response.json()) as T

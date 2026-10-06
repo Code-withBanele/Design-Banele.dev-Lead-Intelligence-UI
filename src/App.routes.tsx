@@ -538,10 +538,8 @@ function SettingsPage() {
             </div>
           ) : (
             <EmptyState
-              title={
-                section === "General" ? "Local session only" : "Not configured"
-              }
-              text="No backend is connected. Session records are held in memory and cleared on refresh."
+              title="Supabase backend"
+              text="Lead persistence is served by the Node/Express API and Supabase PostgreSQL database."
               icon="settings"
             />
           )}

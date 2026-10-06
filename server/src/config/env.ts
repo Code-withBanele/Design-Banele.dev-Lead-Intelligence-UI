@@ -1,4 +1,5 @@
 import { config } from "dotenv"
+
 import { fileURLToPath } from "node:url"
 
 config({
@@ -7,8 +8,11 @@ config({
 
 export const env = {
   port: Number(process.env.PORT ?? 4000),
+
   supabaseUrl: process.env.SUPABASE_URL ?? "",
+
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
+
   nodeEnv: process.env.NODE_ENV ?? "development",
 }
 
