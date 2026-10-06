@@ -45,6 +45,24 @@ export type OpportunityScoreResult = {
   contributingFactors: string[]
 }
 
+export type LeadQualificationStatus =
+  | "QUALIFIED"
+  | "REVIEW_REQUIRED"
+  | "UNQUALIFIED"
+
+export type LeadQualificationResult = {
+  id?: string
+  leadId?: string
+  status: LeadQualificationStatus
+  evidenceSufficiency: "SUFFICIENT" | "PARTIAL" | "INSUFFICIENT"
+  opportunityScore: number
+  classification: OpportunityScoreClassification
+  rulesetVersion: string
+  evaluatedAt: string
+  reasons: string[]
+  blockingFactors: string[]
+}
+
 export type AiBusinessAnalysisSummary = {
   summary: string
   problems: string[]

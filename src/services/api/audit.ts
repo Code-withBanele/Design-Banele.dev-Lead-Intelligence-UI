@@ -6,8 +6,31 @@ import type {
   DigitalAuditInput,
   DigitalIntelligenceResult,
   DigitalIntelligenceRun,
+  LeadQualificationResult,
   OpportunityScoreResult,
 } from "@/types"
+
+export async function getLeadQualification(
+  leadId: string,
+): Promise<LeadQualificationResult | null> {
+  try {
+    return await fetchJson<LeadQualificationResult>(`/leads/${leadId}/qualification`)
+  } catch (error) {
+    if (error instanceof Error && error.message === "Lead qualification not found.") {
+      return null
+    }
+
+    throw error
+  }
+}
+
+export async function evaluateLeadQualification(
+  leadId: string,
+): Promise<LeadQualificationResult> {
+  return fetchJson<LeadQualificationResult>(`/leads/${leadId}/qualification`, {
+    method: "POST",
+  })
+}
 
 export async function getLeadAudit(leadId: string): Promise<DigitalAudit> {
   return fetchJson<DigitalAudit>(`/leads/${leadId}/audit`)

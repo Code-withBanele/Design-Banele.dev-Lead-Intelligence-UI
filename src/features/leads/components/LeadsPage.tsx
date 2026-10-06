@@ -4,9 +4,11 @@ import { Badge, Button, EmptyState, Icon } from "@/components/ui"
 
 import {
   collectDigitalIntelligence,
+  evaluateLeadQualification,
   getAiAnalysis,
   getDigitalIntelligence,
   getLeadAudit,
+  getLeadQualification,
   getOpportunityScore,
 } from "@/services/api"
 
@@ -16,6 +18,7 @@ import {
   type DigitalAudit,
   type DigitalIntelligenceResult,
   type DigitalIntelligenceRun,
+  type LeadQualificationResult,
   type OpportunityScoreResult,
 } from "@/types"
 
@@ -40,6 +43,13 @@ export function LeadPage() {
   const [digitalIntelligence, setDigitalIntelligence] =
     useState<DigitalIntelligenceRun | DigitalIntelligenceResult | null>(null)
 
+  const [qualification, setQualification] =
+    useState<LeadQualificationResult | null>(null)
+
+  const [evaluatingQualification, setEvaluatingQualification] = useState(false)
+
+  const [qualificationError, setQualificationError] = useState<string | null>(null)
+
   const [websiteUrl, setWebsiteUrl] = useState("")
 
   const [collectingDigital, setCollectingDigital] = useState(false)
@@ -53,41 +63,53 @@ export function LeadPage() {
     visibleLeads,
   } = sessionLeads
 
-  useEffect(() => {
-    const lead = visibleLeads[0]
+  const selectedLeadId = visibleLeads[0]?.id
 
-    if (!lead) {
+  useEffect(() => {
+    if (!selectedLeadId) {
       setAuditSummary(null)
       setOpportunityScore(null)
       setAiAnalysis(null)
       setDigitalIntelligence(null)
+      setQualification(null)
       setWebsiteUrl("")
       return
     }
 
     setWebsiteUrl((current) => current || "https://")
+    setQualificationError(null)
 
     void (async () => {
       try {
-        const [audit, score, analysis, intelligence] = await Promise.all([
-          getLeadAudit(lead.id).catch(() => null),
-          getOpportunityScore(lead.id).catch(() => null),
-          getAiAnalysis(lead.id).catch(() => null),
-          getDigitalIntelligence(lead.id).catch(() => null),
+        const [audit, score, analysis, intelligence, latestQualification] = await Promise.all([
+          getLeadAudit(selectedLeadId).catch(() => null),
+          getOpportunityScore(selectedLeadId).catch(() => null),
+          getAiAnalysis(selectedLeadId).catch(() => null),
+          getDigitalIntelligence(selectedLeadId).catch(() => null),
+          getLeadQualification(selectedLeadId).catch((error) => {
+            setQualificationError(
+              error instanceof Error
+                ? error.message
+                : "Unable to load lead qualification.",
+            )
+            return null
+          }),
         ])
 
         setAuditSummary(audit)
         setOpportunityScore(score)
         setAiAnalysis(analysis)
         setDigitalIntelligence(intelligence)
+        setQualification(latestQualification)
       } catch {
         setAuditSummary(null)
         setOpportunityScore(null)
         setAiAnalysis(null)
         setDigitalIntelligence(null)
+        setQualification(null)
       }
     })()
-  }, [visibleLeads])
+  }, [selectedLeadId])
 
   return (
     <div className="page">
@@ -134,7 +156,7 @@ export function LeadPage() {
                   {opportunityScore.score}
                 </div>
                 <div className="text-xs text-[#cfcfcf]">
-                  {opportunityScore.classification} · v{opportunityScore.rulesetVersion}
+                  {opportunityScore.classification} · {opportunityScore.rulesetVersion}
                 </div>
               </div>
             )}
@@ -161,6 +183,81 @@ export function LeadPage() {
           )}
         </section>
       ) : null}
+
+      {visibleLeads[0] && (
+        <section className="panel mb-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
+            <div>
+              <p className="eyebrow">DETERMINISTIC QUALIFICATION</p>
+              <h2 className="text-xl font-semibold text-white">Lead readiness</h2>
+            </div>
+            <button
+              type="button"
+              className="rounded border border-[#303030] bg-[#111111] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={evaluatingQualification || !opportunityScore}
+              title={!opportunityScore ? "Calculate an opportunity score first" : "Evaluate lead qualification"}
+              onClick={async () => {
+                const lead = visibleLeads[0]
+                if (!lead) return
+                try {
+                  setEvaluatingQualification(true)
+                  setQualificationError(null)
+                  setQualification(await evaluateLeadQualification(lead.id))
+                } catch (error) {
+                  setQualificationError(
+                    error instanceof Error ? error.message : "Qualification failed.",
+                  )
+                } finally {
+                  setEvaluatingQualification(false)
+                }
+              }}
+            >
+              {evaluatingQualification ? "Evaluating..." : "Evaluate qualification"}
+            </button>
+          </div>
+          {qualificationError && (
+            <div className="mb-3 rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+              {qualificationError}
+            </div>
+          )}
+          {qualification ? (
+            <div className="space-y-3 text-sm text-[#d4d4d4]">
+              <div className="flex flex-wrap gap-x-5 gap-y-1">
+                <span>Status: <strong className="text-white">{qualification.status.replaceAll("_", " ")}</strong></span>
+                <span>Evidence: <strong className="text-white">{qualification.evidenceSufficiency}</strong></span>
+                <span>Opportunity: <strong className="text-white">{qualification.opportunityScore} / {qualification.classification}</strong></span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">Reasons</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {qualification.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">Blocking factors</p>
+                  {qualification.blockingFactors.length ? (
+                    <ul className="list-disc space-y-1 pl-5">
+                      {qualification.blockingFactors.map((factor) => <li key={factor}>{factor}</li>)}
+                    </ul>
+                  ) : <p>No blocking factors.</p>}
+                </div>
+              </div>
+              <p className="text-xs text-[#a5a5a5]">
+                Evaluated {new Date(qualification.evaluatedAt).toLocaleString()} · Ruleset {qualification.rulesetVersion}
+              </p>
+            </div>
+          ) : (
+            !qualificationError && (
+              <p className="text-sm text-[#a5a5a5]">
+                {opportunityScore
+                  ? "No qualification decision has been recorded for this lead."
+                  : "Calculate a deterministic opportunity score before evaluating qualification."}
+              </p>
+            )
+          )}
+        </section>
+      )}
 
       {visibleLeads[0] && (
         <section className="panel mb-4 p-4">

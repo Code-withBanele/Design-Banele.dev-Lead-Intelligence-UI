@@ -5,9 +5,11 @@ export {
   collectDigitalIntelligence,
   createAiAnalysis,
   createLeadAudit,
+  evaluateLeadQualification,
   getAiAnalysis,
   getDigitalIntelligence,
   getLeadAudit,
+  getLeadQualification,
   getOpportunityScore,
 } from "./audit"
 
