@@ -44,3 +44,30 @@ export type OpportunityScoreResult = {
   calculatedAt: string
   contributingFactors: string[]
 }
+
+export type AiBusinessAnalysisSummary = {
+  summary: string
+  problems: string[]
+  opportunities: string[]
+  recommendations: string[]
+  digitalSolution: string
+  outreachAngle: string
+}
+
+export type AiAnalysisRecord = {
+  id: string
+  leadId: string
+  provider: string
+  model: string
+  promptVersion: string
+  analysis: AiBusinessAnalysisSummary
+  routingMetadata: {
+    requestedModel: string
+    selectedModel: string
+    provider: string
+    fallbackUsed: boolean
+    attemptCount: number
+    failureReason?: string
+  }
+  createdAt: string
+}

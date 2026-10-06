@@ -2,9 +2,14 @@ import { useEffect, useState } from "react"
 
 import { Badge, Button, EmptyState, Icon } from "@/components/ui"
 
-import { getLeadAudit, getOpportunityScore } from "@/services/api"
+import { getAiAnalysis, getLeadAudit, getOpportunityScore } from "@/services/api"
 
-import { LEAD_STATUSES, type DigitalAudit, type OpportunityScoreResult } from "@/types"
+import {
+  LEAD_STATUSES,
+  type AiAnalysisRecord,
+  type DigitalAudit,
+  type OpportunityScoreResult,
+} from "@/types"
 
 import { useSessionLeads } from "../hooks/useSessionLeads"
 
@@ -22,6 +27,8 @@ export function LeadPage() {
   const [opportunityScore, setOpportunityScore] =
     useState<OpportunityScoreResult | null>(null)
 
+  const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisRecord | null>(null)
+
   const {
     filteredLeads,
     currentPage: page,
@@ -35,21 +42,25 @@ export function LeadPage() {
     if (!lead) {
       setAuditSummary(null)
       setOpportunityScore(null)
+      setAiAnalysis(null)
       return
     }
 
     void (async () => {
       try {
-        const [audit, score] = await Promise.all([
+        const [audit, score, analysis] = await Promise.all([
           getLeadAudit(lead.id).catch(() => null),
           getOpportunityScore(lead.id).catch(() => null),
+          getAiAnalysis(lead.id).catch(() => null),
         ])
 
         setAuditSummary(audit)
         setOpportunityScore(score)
+        setAiAnalysis(analysis)
       } catch {
         setAuditSummary(null)
         setOpportunityScore(null)
+        setAiAnalysis(null)
       }
     })()
   }, [visibleLeads])
@@ -126,6 +137,74 @@ export function LeadPage() {
           )}
         </section>
       ) : null}
+
+      {aiAnalysis && (
+        <section className="panel mb-4 p-4">
+          <div className="flex items-center justify-between gap-3 pb-3">
+            <div>
+              <p className="eyebrow">AI BUSINESS ANALYSIS</p>
+              <h2 className="text-xl font-semibold text-white">Interpretation</h2>
+            </div>
+            <div className="text-right text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+              {aiAnalysis.provider} / {aiAnalysis.model}
+            </div>
+          </div>
+          <div className="space-y-4 text-sm text-[#d4d4d4]">
+            <div>
+              <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+                Summary
+              </p>
+              <p>{aiAnalysis.analysis.summary}</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+                  Problems
+                </p>
+                <ul className="list-disc space-y-1 pl-5">
+                  {(aiAnalysis.analysis.problems.length ? aiAnalysis.analysis.problems : ["No issues flagged."]).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+                  Opportunities
+                </p>
+                <ul className="list-disc space-y-1 pl-5">
+                  {(aiAnalysis.analysis.opportunities.length ? aiAnalysis.analysis.opportunities : ["No opportunity notes available."]).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+                  Recommendations
+                </p>
+                <ul className="list-disc space-y-1 pl-5">
+                  {(aiAnalysis.analysis.recommendations.length ? aiAnalysis.analysis.recommendations : ["No recommendations generated."]).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+                  Digital solution
+                </p>
+                <p>{aiAnalysis.analysis.digitalSolution || "No digital solution provided."}</p>
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+                Outreach angle
+              </p>
+              <p>{aiAnalysis.analysis.outreachAngle || "No outreach angle provided."}</p>
+            </div>
+          </div>
+        </section>
+      )}
       {sessionLeads.loading && (
         <div className="panel p-4 text-sm text-zinc-300">Loading leads…</div>
       )}

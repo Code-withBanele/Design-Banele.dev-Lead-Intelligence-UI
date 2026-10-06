@@ -1,6 +1,7 @@
 import { fetchJson } from "./client"
 
 import type {
+  AiAnalysisRecord,
   DigitalAudit,
   DigitalAuditInput,
   OpportunityScoreResult,
@@ -33,5 +34,17 @@ export async function calculateOpportunityScore(
   return fetchJson<OpportunityScoreResult>(`/leads/${leadId}/opportunity-score`, {
     method: "POST",
     body: JSON.stringify(input),
+  })
+}
+
+export async function getAiAnalysis(leadId: string): Promise<AiAnalysisRecord> {
+  return fetchJson<AiAnalysisRecord>(`/leads/${leadId}/ai-analysis`)
+}
+
+export async function createAiAnalysis(
+  leadId: string,
+): Promise<AiAnalysisRecord> {
+  return fetchJson<AiAnalysisRecord>(`/leads/${leadId}/ai-analysis`, {
+    method: "POST",
   })
 }

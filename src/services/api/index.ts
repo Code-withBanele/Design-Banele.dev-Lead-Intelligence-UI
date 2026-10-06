@@ -2,7 +2,9 @@ export { apiClient, fetchJson } from "./client"
 
 export {
   calculateOpportunityScore,
+  createAiAnalysis,
   createLeadAudit,
+  getAiAnalysis,
   getLeadAudit,
   getOpportunityScore,
 } from "./audit"
