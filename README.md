@@ -26,6 +26,7 @@ The frontend communicates only with the local Node API. The Supabase service-rol
 - Deterministic digital audit factors with `hasGoogleBusinessProfile` included
 - Centralized opportunity-scoring ruleset and computed classifications
 - API endpoints for audit persistence and score retrieval
+- Backend-only OpenRouter AI business analysis layered on top of authoritative score results
 
 The API does not implement discovery, scoring, AI, outreach, automation, authentication, or CRM expansion.
 
@@ -72,11 +73,22 @@ Create a root `.env` file with:
 PORT=4000
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+OPENROUTER_API_KEY=your-openrouter-key
 VITE_API_BASE_URL=http://localhost:4000/api
 NODE_ENV=development
 ```
 
-The frontend uses `VITE_API_BASE_URL`. The Supabase URL and service-role key are loaded server-side and must remain private.
+The frontend uses `VITE_API_BASE_URL`. The Supabase URL, service-role key, and OpenRouter key are loaded server-side and must remain private.
+
+### AI business analysis layer
+
+Step 4 adds a backend-only AI layer that interprets deterministic lead results without altering the score. The AI service:
+
+- requires an existing opportunity score before generating analysis
+- uses OpenRouter with model fallback and capability checks
+- stores AI output in the `ai_analyses` table
+- exposes `GET /api/leads/:id/ai-analysis` and `POST /api/leads/:id/ai-analysis`
+- keeps the deterministic score authoritative and immutable from AI output
 
 ## Database
 

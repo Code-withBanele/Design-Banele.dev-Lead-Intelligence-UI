@@ -13,6 +13,8 @@ export const env = {
 
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
 
+  openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
+
   nodeEnv: process.env.NODE_ENV ?? "development",
 }
 

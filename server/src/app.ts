@@ -4,6 +4,8 @@ import cors from "cors"
 
 import morgan from "morgan"
 
+import aiRoutes from "./routes/aiRoutes.js"
+
 import auditRoutes from "./routes/auditRoutes.js"
 
 import leadRoutes from "./routes/leadRoutes.js"
@@ -21,6 +23,8 @@ app.get("/health", (_req, res) => {
 })
 
 app.use("/api", auditRoutes)
+
+app.use("/api", aiRoutes)
 
 app.use("/api/leads", leadRoutes)
 
