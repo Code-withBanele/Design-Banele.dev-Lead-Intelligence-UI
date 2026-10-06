@@ -2,7 +2,13 @@ import type { ReactNode } from "react"
 
 export type IconName = "dashboard" | "leads" | "discovery" | "audit" | "automation" | "analytics" | "settings" | "search" | "bell" | "chevron" | "arrow" | "more" | "filter" | "plus" | "spark" | "globe" | "instagram" | "clock" | "check" | "alert" | "user" | "menu" | "close" | "external" | "mail" | "phone" | "play" | "download" | "calendar" | "location" | "building" | "lock"
 
-export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+export function Icon({
+  name,
+  size = 18,
+}: {
+  name: IconName
+  size?: number
+}) {
   const paths: Record<IconName, ReactNode> = {
     dashboard: (
       <>
@@ -196,9 +202,11 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
 
 export function Badge({
   children,
+
   tone = "neutral",
 }: {
   children: ReactNode
+
   tone?: string
 }) {
   return (
@@ -211,15 +219,23 @@ export function Badge({
 
 export function Button({
   children,
+
   variant = "primary",
+
   icon,
+
   onClick,
+
   disabled,
 }: {
   children: ReactNode
+
   variant?: "primary" | "secondary" | "ghost" | "accent"
+
   icon?: IconName
+
   onClick?: () => void
+
   disabled?: boolean
 }) {
   return (
@@ -236,11 +252,15 @@ export function Button({
 
 export function SectionHeader({
   title,
+
   meta,
+
   action,
 }: {
   title: string
+
   meta?: string
+
   action?: ReactNode
 }) {
   return (
@@ -256,11 +276,15 @@ export function SectionHeader({
 
 export function EmptyState({
   title,
+
   text,
+
   icon = "search",
 }: {
   title: string
+
   text: string
+
   icon?: IconName
 }) {
   return (

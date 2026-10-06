@@ -23,6 +23,9 @@ The frontend communicates only with the local Node API. The Supabase service-rol
 - Lead status updates through `PATCH /api/leads/:id`
 - Structured API errors and loading states
 - Supabase-backed businesses and leads
+- Deterministic digital audit factors with `hasGoogleBusinessProfile` included
+- Centralized opportunity-scoring ruleset and computed classifications
+- API endpoints for audit persistence and score retrieval
 
 The API does not implement discovery, scoring, AI, outreach, automation, authentication, or CRM expansion.
 
@@ -87,7 +90,7 @@ It creates:
 
 The existing migration is the source of truth. Do not rewrite completed migration history; create another migration for schema changes.
 
-The current migration already declares `opportunity_score` with a default of `0`. Because the migration is already applied, changing it would require a new migration. No schema change was made for this Step 2 requirement.
+The hardened migration declares `opportunity_score` with a default of `NULL`, and `0` remains a valid calculated score when a score has been computed. The repository tracks this as a schema change in `supabase/migrations/002_harden_lead_creation.sql`, and it must be applied to the live Supabase project before the transactional lead-creation flow is considered production-ready.
 
 ## API
 

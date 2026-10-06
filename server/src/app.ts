@@ -4,6 +4,8 @@ import cors from "cors"
 
 import morgan from "morgan"
 
+import auditRoutes from "./routes/auditRoutes.js"
+
 import leadRoutes from "./routes/leadRoutes.js"
 
 const app = express()
@@ -17,6 +19,8 @@ app.use(morgan("dev"))
 app.get("/health", (_req, res) => {
   res.json({ ok: true, service: "lead-intelligence-api" })
 })
+
+app.use("/api", auditRoutes)
 
 app.use("/api/leads", leadRoutes)
 

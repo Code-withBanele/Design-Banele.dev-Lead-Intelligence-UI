@@ -1,8 +1,10 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Badge, Button, EmptyState, Icon } from "@/components/ui"
 
-import { LEAD_STATUSES } from "@/types"
+import { getLeadAudit, getOpportunityScore } from "@/services/api"
+
+import { LEAD_STATUSES, type DigitalAudit, type OpportunityScoreResult } from "@/types"
 
 import { useSessionLeads } from "../hooks/useSessionLeads"
 
@@ -15,12 +17,42 @@ export function LeadPage() {
 
   const [adding, setAdding] = useState(false)
 
+  const [auditSummary, setAuditSummary] = useState<DigitalAudit | null>(null)
+
+  const [opportunityScore, setOpportunityScore] =
+    useState<OpportunityScoreResult | null>(null)
+
   const {
     filteredLeads,
     currentPage: page,
     totalPages,
     visibleLeads,
   } = sessionLeads
+
+  useEffect(() => {
+    const lead = visibleLeads[0]
+
+    if (!lead) {
+      setAuditSummary(null)
+      setOpportunityScore(null)
+      return
+    }
+
+    void (async () => {
+      try {
+        const [audit, score] = await Promise.all([
+          getLeadAudit(lead.id).catch(() => null),
+          getOpportunityScore(lead.id).catch(() => null),
+        ])
+
+        setAuditSummary(audit)
+        setOpportunityScore(score)
+      } catch {
+        setAuditSummary(null)
+        setOpportunityScore(null)
+      }
+    })()
+  }, [visibleLeads])
 
   return (
     <div className="page">
@@ -51,6 +83,49 @@ export function LeadPage() {
           onCancel={() => setAdding(false)}
         />
       )}
+      {auditSummary || opportunityScore ? (
+        <section className="panel mb-4 p-4">
+          <div className="flex items-center justify-between gap-3 pb-3">
+            <div>
+              <p className="eyebrow">DETERMINISTIC DIGITAL AUDIT</p>
+              <h2 className="text-xl font-semibold text-white">Lead score summary</h2>
+            </div>
+            {opportunityScore && (
+              <div className="rounded border border-[#303030] bg-[#111111] p-3 text-left">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
+                  Score
+                </div>
+                <div className="mt-1 text-2xl font-semibold text-white">
+                  {opportunityScore.score}
+                </div>
+                <div className="text-xs text-[#cfcfcf]">
+                  {opportunityScore.classification} · v{opportunityScore.rulesetVersion}
+                </div>
+              </div>
+            )}
+          </div>
+          {auditSummary && (
+            <div className="grid gap-2 md:grid-cols-2">
+              {auditSummary.factors.slice(0, 6).map((factor) => (
+                <div
+                  key={factor.key}
+                  className="flex items-center justify-between rounded border border-[#222] bg-[#111111] px-3 py-2 text-sm"
+                >
+                  <span className="text-[#d4d4d4]">{factor.key}</span>
+                  <span className="text-[#f5f5f5]">
+                    {factor.value === null ? "?" : factor.value ? "✓" : "✕"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {opportunityScore && (
+            <div className="mt-3 text-sm text-[#d4d4d4]">
+              Contributing factors: {opportunityScore.contributingFactors.join(" • ") || "None yet"}
+            </div>
+          )}
+        </section>
+      ) : null}
       {sessionLeads.loading && (
         <div className="panel p-4 text-sm text-zinc-300">Loading leads…</div>
       )}
