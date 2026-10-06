@@ -7,6 +7,7 @@ import {
   getAiAnalysis,
   getDigitalIntelligence,
   getLeadAudit,
+  getLeadQualification,
   getOpportunityScore,
 } from "@/services/api"
 
@@ -16,6 +17,7 @@ import {
   type DigitalAudit,
   type DigitalIntelligenceResult,
   type DigitalIntelligenceRun,
+  type LeadQualification,
   type OpportunityScoreResult,
 } from "@/types"
 
@@ -34,6 +36,8 @@ export function LeadPage() {
 
   const [opportunityScore, setOpportunityScore] =
     useState<OpportunityScoreResult | null>(null)
+
+  const [qualification, setQualification] = useState<LeadQualification | null>(null)
 
   const [aiAnalysis, setAiAnalysis] = useState<AiAnalysisRecord | null>(null)
 
@@ -59,6 +63,7 @@ export function LeadPage() {
     if (!lead) {
       setAuditSummary(null)
       setOpportunityScore(null)
+      setQualification(null)
       setAiAnalysis(null)
       setDigitalIntelligence(null)
       setWebsiteUrl("")
@@ -69,20 +74,23 @@ export function LeadPage() {
 
     void (async () => {
       try {
-        const [audit, score, analysis, intelligence] = await Promise.all([
+        const [audit, score, qualificationResult, analysis, intelligence] = await Promise.all([
           getLeadAudit(lead.id).catch(() => null),
           getOpportunityScore(lead.id).catch(() => null),
+          getLeadQualification(lead.id).catch(() => null),
           getAiAnalysis(lead.id).catch(() => null),
           getDigitalIntelligence(lead.id).catch(() => null),
         ])
 
         setAuditSummary(audit)
         setOpportunityScore(score)
+        setQualification(qualificationResult)
         setAiAnalysis(analysis)
         setDigitalIntelligence(intelligence)
       } catch {
         setAuditSummary(null)
         setOpportunityScore(null)
+        setQualification(null)
         setAiAnalysis(null)
         setDigitalIntelligence(null)
       }
@@ -118,7 +126,7 @@ export function LeadPage() {
           onCancel={() => setAdding(false)}
         />
       )}
-      {auditSummary || opportunityScore ? (
+      {auditSummary || opportunityScore || qualification ? (
         <section className="panel mb-4 p-4">
           <div className="flex items-center justify-between gap-3 pb-3">
             <div>
@@ -139,6 +147,14 @@ export function LeadPage() {
               </div>
             )}
           </div>
+          {qualification && (
+            <div className="mb-3 rounded border border-[#2a2a2a] bg-[#111111] px-3 py-2 text-sm text-[#d4d4d4]">
+              <span className="mr-2 rounded border border-[#303030] bg-[#191919] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-white">
+                {qualification.status}
+              </span>
+              {qualification.reasons.join(" ") || "Qualification reviewed."}
+            </div>
+          )}
           {auditSummary && (
             <div className="grid gap-2 md:grid-cols-2">
               {auditSummary.factors.slice(0, 6).map((factor) => (

@@ -8,7 +8,9 @@ export {
   getAiAnalysis,
   getDigitalIntelligence,
   getLeadAudit,
+  getLeadQualification,
   getOpportunityScore,
+  qualifyLead,
 } from "./audit"
 
 export { createLead, getLead, getLeads, updateLead } from "./leads"

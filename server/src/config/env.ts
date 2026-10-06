@@ -18,8 +18,12 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
 }
 
+export function hasSupabaseConfiguration() {
+  return Boolean(env.supabaseUrl && env.supabaseServiceRoleKey)
+}
+
 export function requireServerEnv() {
-  if (!env.supabaseUrl || !env.supabaseServiceRoleKey) {
+  if (!hasSupabaseConfiguration()) {
     throw new Error(
       "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables.",
     )

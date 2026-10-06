@@ -6,6 +6,7 @@ import type {
   DigitalAuditInput,
   DigitalIntelligenceResult,
   DigitalIntelligenceRun,
+  LeadQualification,
   OpportunityScoreResult,
 } from "@/types"
 
@@ -64,5 +65,17 @@ export async function collectDigitalIntelligence(
   return fetchJson<DigitalIntelligenceResult>(`/leads/${leadId}/digital-intelligence`, {
     method: "POST",
     body: JSON.stringify(input),
+  })
+}
+
+export async function getLeadQualification(
+  leadId: string,
+): Promise<LeadQualification> {
+  return fetchJson<LeadQualification>(`/leads/${leadId}/qualification`)
+}
+
+export async function qualifyLead(leadId: string): Promise<LeadQualification> {
+  return fetchJson<LeadQualification>(`/leads/${leadId}/qualification`, {
+    method: "POST",
   })
 }

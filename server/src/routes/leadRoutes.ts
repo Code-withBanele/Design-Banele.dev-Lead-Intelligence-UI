@@ -6,6 +6,10 @@ import {
   getLeads,
   updateLeadStatus,
 } from "../services/leadService.js"
+import {
+  calculateLeadQualification,
+  getLatestLeadQualification,
+} from "../services/leadQualificationService.js"
 
 import { isLeadStatus } from "../utils/leadValidation.js"
 
@@ -81,6 +85,25 @@ router.patch("/:id", async (req, res, next) => {
     const lead = await updateLeadStatus(req.params.id, status)
 
     res.json(lead)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get("/:id/qualification", async (req, res, next) => {
+  try {
+    await getLeadById(req.params.id)
+    const result = await getLatestLeadQualification(req.params.id)
+    res.json(result)
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post("/:id/qualification", async (req, res, next) => {
+  try {
+    const result = await calculateLeadQualification(req.params.id)
+    res.status(201).json(result)
   } catch (error) {
     next(error)
   }

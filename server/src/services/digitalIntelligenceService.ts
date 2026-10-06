@@ -84,19 +84,23 @@ export const DIGITAL_INTELLIGENCE_CONFIG = {
 }
 
 function isPrivateIp(hostname: string): boolean {
-  if (!hostname || hostname === "localhost") return true
+  const host = hostname.replace(/^\[|\]$/g, "").trim().toLowerCase()
 
-  if (hostname.includes(":")) {
-    return hostname === "::1" || hostname === "[::1]"
+  if (!host || host === "localhost") return true
+
+  if (host === "::1" || host === "0:0:0:0:0:0:0:1") return true
+
+  if (host.includes("::ffff:")) {
+    return isPrivateIp(host.replace("::ffff:", ""))
   }
 
-  if (hostname.startsWith("[") && hostname.endsWith("]")) {
-    return hostname.slice(1, -1) === "::1"
+  if (host.includes(":")) {
+    return host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80") || host === "::1"
   }
 
-  if (isIP(hostname) === 0) return false
+  if (isIP(host) === 0) return false
 
-  const addr = hostname.split(".").map(Number)
+  const addr = host.split(".").map(Number)
 
   if (addr.length !== 4 || addr.some((part) => Number.isNaN(part))) {
     return false
@@ -107,7 +111,9 @@ function isPrivateIp(hostname: string): boolean {
     (addr[0] === 172 && addr[1] >= 16 && addr[1] <= 31) ||
     (addr[0] === 192 && addr[1] === 168) ||
     (addr[0] === 127) ||
-    (addr[0] === 0 && addr[1] === 0 && addr[2] === 0 && addr[3] === 0)
+    (addr[0] === 0 && addr[1] === 0 && addr[2] === 0 && addr[3] === 0) ||
+    addr[0] === 169 && addr[1] === 254 ||
+    (addr[0] === 100 && addr[1] >= 64 && addr[1] <= 127)
   )
 }
 
@@ -116,10 +122,11 @@ function isBlockedHostname(hostname: string): boolean {
 
   if (!host) return true
   if (host === "localhost" || host.endsWith(".localhost")) return true
-  if (host === "localhost.localdomain") return true
+  if (host === "localhost.localdomain" || host.endsWith(".localdomain")) return true
   if (host === "127.0.0.1" || host === "0.0.0.0" || host === "::1") return true
   if (host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("172.")) return true
-  if (host.includes(".internal") || host.includes(".local")) return true
+  if (host.startsWith("169.254.") || host.startsWith("100.64.") || host.startsWith("198.18.") || host.startsWith("198.51.100.")) return true
+  if (host.includes(".internal") || host.includes(".local") || host.endsWith(".home.arpa") || host.endsWith(".lan")) return true
 
   return isPrivateIp(host)
 }
@@ -153,7 +160,7 @@ export function validateWebsiteUrl(rawUrl: string): string {
 }
 
 async function fetchWithTimeout(url: string, timeoutMs: number, maxRedirects: number) {
-  let currentUrl = url
+  let currentUrl = validateWebsiteUrl(url)
   const history: string[] = []
 
   for (let redirectRound = 0; redirectRound <= maxRedirects; redirectRound += 1) {
@@ -176,8 +183,17 @@ async function fetchWithTimeout(url: string, timeoutMs: number, maxRedirects: nu
 
       if (isRedirect && location) {
         history.push(currentUrl)
-        const nextUrl = new URL(location, currentUrl).toString()
-        currentUrl = nextUrl
+        const nextTarget = new URL(location, currentUrl)
+
+        if (!["http:", "https:"].includes(nextTarget.protocol)) {
+          throw new Error("Redirect target uses an unsupported protocol.")
+        }
+
+        if (isBlockedHostname(nextTarget.hostname)) {
+          throw new Error("Redirect target resolves to a blocked local or private network address.")
+        }
+
+        currentUrl = nextTarget.toString().replace(/\/$/, "")
         continue
       }
 
@@ -625,6 +641,8 @@ export function mapEvidenceToAuditInput(evidence: DigitalEvidence[]): Record<str
   const result: Record<string, unknown> = {}
 
   const findKey = (key: string) => evidence.some((entry) => entry.key === key)
+  const seoSignals = ["page_title", "meta_description", "canonical_url", "structured_data"]
+  const seoSignalCount = seoSignals.filter((key) => findKey(key)).length
 
   result.hasWebsite = findKey("website_reachable") ? true : null
   result.hasGoogleBusinessProfile = findKey("google_maps_link") ? true : null
@@ -634,7 +652,8 @@ export function mapEvidenceToAuditInput(evidence: DigitalEvidence[]): Record<str
   result.hasOnlineBooking = findKey("booking_link") ? true : null
   result.hasOnlineOrdering = findKey("ordering_link") ? true : null
   result.hasStrongCTA = findKey("cta") ? true : null
-  result.hasBasicSEO = findKey("page_title") || findKey("meta_description") || findKey("canonical_url") ? true : null
+  result.hasBasicSEO =
+    seoSignalCount >= 2 ? true : seoSignalCount > 0 ? false : null
   result.hasVisibleBusinessInformation =
     findKey("business_name") || findKey("phone_number") || findKey("email_address") ? true : null
   result.hasMobileFriendlyWebsite = findKey("viewport_meta") ? true : null

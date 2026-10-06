@@ -450,6 +450,15 @@ function WorkspacePage({
       Analytics: [],
     }
 
+  const workspaceNotice =
+    !health
+      ? "The workspace is currently offline because the backend is not reachable."
+      : health.status === "healthy"
+        ? "The backend is running and the workspace is ready for live intelligence actions."
+        : health.status === "degraded"
+          ? "The backend is reachable, but one or more services need attention before full automation is available."
+          : "The workspace is waiting for the required backend configuration and service health to be restored.";
+
   return (
     <div className="page">
       <div className="page-heading">
@@ -474,7 +483,7 @@ function WorkspacePage({
             <SectionHeader title={title} />
             <EmptyState
               title={empty}
-              text="No backend services are connected. This frontend cannot execute jobs or generate results."
+              text={workspaceNotice}
               icon={icon}
             />
           </section>
@@ -610,8 +619,9 @@ function SettingsPage({ health }: { health: SystemHealthResponse | null }) {
                 confirmed opportunity.
               </p>
               <p>
-                No scoring rules are configured, and no scoring engine is
-                connected.
+                {health && health.services.scoring.status === "AVAILABLE"
+                  ? "Deterministic scoring is available in the backend and is the source of truth for opportunity calculations."
+                  : "Deterministic scoring is not yet fully operational in this workspace, so the UI remains a read-only view until the backend is healthy."}
               </p>
               <p>
                 AI analysis follows validated deterministic scoring. Outreach

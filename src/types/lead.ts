@@ -20,7 +20,27 @@ export const LEAD_STATUSES = [
   "ARCHIVED",
 ] as const
 
+export const LEAD_QUALIFICATION_STATUSES = [
+  "qualified",
+  "needs_review",
+  "unqualified",
+] as const
+
 export type LeadStatus = typeof LEAD_STATUSES[number]
+
+export type LeadQualificationStatus =
+  (typeof LEAD_QUALIFICATION_STATUSES)[number]
+
+export type LeadQualification = {
+  id: string
+  leadId: string
+  status: LeadQualificationStatus
+  score: number
+  classification: "LOW" | "MEDIUM" | "HIGH"
+  reasons: string[]
+  evidence: string[]
+  calculatedAt: string
+}
 
 export type Lead = {
   id: string

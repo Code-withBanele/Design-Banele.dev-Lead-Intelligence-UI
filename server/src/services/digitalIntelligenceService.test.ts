@@ -57,5 +57,13 @@ test("evidence maps into the deterministic audit contract", () => {
   assert.equal(audit.hasWebsite, true)
   assert.equal(audit.hasGoogleBusinessProfile, true)
   assert.equal(audit.hasContactMethod, true)
-  assert.equal(audit.hasBasicSEO, true)
+  assert.equal(audit.hasBasicSEO, false)
+
+  const strongerAudit = mapEvidenceToAuditInput([
+    ...input,
+    { category: "seo", key: "meta_description", value: "Example description", sourceUrl: "https://example.com", sourceType: "website", confidence: "medium", collectedAt: new Date().toISOString() },
+    { category: "seo", key: "canonical_url", value: "https://example.com/", sourceUrl: "https://example.com", sourceType: "website", confidence: "medium", collectedAt: new Date().toISOString() },
+  ] as any)
+
+  assert.equal(strongerAudit.hasBasicSEO, true)
 })
