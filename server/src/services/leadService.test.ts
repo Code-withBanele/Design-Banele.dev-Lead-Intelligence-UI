@@ -18,14 +18,21 @@ test("lead input normalization preserves the current API contract", () => {
   assert.deepEqual(
     normalizeLeadInput({
       name: " Example Co ",
+
       industry: "  SaaS  ",
+
       location: "Cape Town",
+
       status: "NEW",
     }),
+
     {
       name: "Example Co",
+
       industry: "SaaS",
+
       location: "Cape Town",
+
       status: "NEW",
     },
   )
@@ -36,8 +43,10 @@ test("invalid create input is rejected before a database write", () => {
     () =>
       normalizeLeadInput({
         name: "   ",
+
         status: "NEW",
       }),
+
     /Business name is required\./,
   )
 })

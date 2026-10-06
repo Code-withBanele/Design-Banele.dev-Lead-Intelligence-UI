@@ -184,8 +184,7 @@ export async function createLeadWithBusiness(input: LeadPayload) {
   })
 
   if (error || !data || !Array.isArray(data) || data.length === 0) {
-    const message =
-      error?.message ?? "Failed to create the lead record."
+    const message = error?.message ?? "Failed to create the lead record."
 
     const serviceError = new Error(message) as Error & {
       statusCode?: number

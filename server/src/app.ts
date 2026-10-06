@@ -20,6 +20,15 @@ app.get("/health", (_req, res) => {
 
 app.use("/api/leads", leadRoutes)
 
+app.use((req, res) => {
+  res.status(404).json({
+    error: {
+      code: "NOT_FOUND",
+      message: `Route not found: ${req.originalUrl}`,
+    },
+  })
+})
+
 app.use(
   (
     error: any,
