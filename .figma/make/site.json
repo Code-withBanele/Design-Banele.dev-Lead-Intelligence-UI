@@ -1,0 +1,10 @@
+{
+  "description": "AI-powered platform for discovering, auditing, scoring, and managing business leads with detailed digital insights and CRM pipeline tracking.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

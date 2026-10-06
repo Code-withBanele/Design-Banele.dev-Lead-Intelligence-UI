@@ -2,7 +2,7 @@
 
 An internal, AI-assisted business prospecting and digital-opportunity platform for Banele.dev.
 
-This repository contains the **frontend UI only**. It models the complete workflow from business discovery through qualification and human-approved outreach, while keeping deterministic scoring, AI interpretation, automation, and persistence as separate backend responsibilities.
+This repository contains the **frontend UI and a Node/TypeScript API boundary** for the lead workflow. It models the complete workflow from business discovery through qualification and human-approved outreach, while keeping deterministic scoring, AI interpretation, automation, and persistence as separate backend responsibilities.
 
 ## Product workflow
 
@@ -203,5 +203,3 @@ The UI uses:
 - Explicit no-data and disconnected-service states
 - Responsive tables and card-based mobile layouts
 - Consistent dial cards across Analytics metrics, preserving percentage and count units
-#   D e s i g n - B a n e l e . d e v - L e a d - I n t e l l i g e n c e - U I  
- 
