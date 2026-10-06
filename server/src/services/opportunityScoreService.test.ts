@@ -27,6 +27,8 @@ test("known positive factors are scored and classified as high", () => {
   assert.equal(result.score, 113)
   assert.equal(result.classification, "HIGH")
   assert.equal(result.rulesetVersion, OPPORTUNITY_SCORE_RULESET_VERSION)
+  assert.equal(result.factorWeights.hasWebsite, 18)
+  assert.equal(result.factorWeights.hasGoogleBusinessProfile, 20)
   assert.ok(result.contributingFactors.length > 0)
 })
 

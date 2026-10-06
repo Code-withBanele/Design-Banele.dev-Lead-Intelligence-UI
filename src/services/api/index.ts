@@ -1,5 +1,7 @@
 export { apiClient, fetchJson } from "./client"
 
+export { getAnalytics } from "./analytics"
+
 export {
   calculateOpportunityScore,
   collectDigitalIntelligence,

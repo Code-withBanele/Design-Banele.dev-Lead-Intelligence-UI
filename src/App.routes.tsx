@@ -21,6 +21,8 @@ import { useSessionLeads } from "./features/leads/hooks/useSessionLeads"
 
 import { useServiceHealth } from "./hooks/useServiceHealth"
 
+import { getAnalytics } from "./services/api"
+
 import Prism from "./Prism"
 
 import { LEAD_STATUSES, type SystemHealthResponse } from "./types"
@@ -261,7 +263,13 @@ function Header({
           <input placeholder="Search businesses, leads..." />
           <kbd>⌘ K</kbd>
         </div>
-        <button className="icon-button">
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Notifications unavailable"
+          title="Notifications are not available yet"
+          disabled
+        >
           <Icon name="bell" />
         </button>
       </div>
@@ -422,6 +430,16 @@ function WorkspacePage({
   page,
   health,
 }: RoutePageProps & { health: SystemHealthResponse | null }) {
+  const [analytics, setAnalytics] = useState<Awaited<ReturnType<typeof getAnalytics>> | null>(null)
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (page !== "Audits") return
+    void getAnalytics().then(setAnalytics).catch((error) => {
+      setAnalyticsError(error instanceof Error ? error.message : "Unable to load audit counts.")
+    })
+  }, [page])
+
   const descriptions: Record<ViewPage, string> = {
     Dashboard: "",
     Discovery: "Discover and enrich businesses from configured sources.",
@@ -463,6 +481,8 @@ function WorkspacePage({
             ? "AVAILABLE"
             : page === "Discovery" || page === "Automation"
               ? "NOT CONFIGURED"
+              : page === "Settings"
+                ? "LOCAL"
               : health && health.status === "healthy"
                 ? "CONNECTED"
                 : "LOCAL"}
@@ -471,12 +491,27 @@ function WorkspacePage({
       <div className="lower-grid">
         {cards[page].map(([title, empty, icon]) => (
           <section className="panel" key={title}>
-            <SectionHeader title={title} />
-            <EmptyState
-              title={empty}
-              text="No backend services are connected. This frontend cannot execute jobs or generate results."
-              icon={icon}
+            <SectionHeader
+              title={page === "Audits" ? (title === "Digital audits" ? "Audit engine" : "Scoring engine") : title}
+              meta={page === "Audits"
+                ? `${describeStatus(health?.services[title === "Digital audits" ? "audit" : "scoring"].status ?? "UNKNOWN")} · ${title === "Digital audits" ? analytics?.auditCount ?? "—" : analytics?.opportunityScoreCount ?? "—"} results`
+                : undefined}
             />
+            {analyticsError && page === "Audits" ? (
+              <p className="p-4 text-sm text-red-300">{analyticsError}</p>
+            ) : page === "Audits" && (title === "Digital audits" ? analytics?.auditCount : analytics?.opportunityScoreCount) ? (
+              <p className="p-4 text-sm text-[#d4d4d4]">
+                {title === "Digital audits"
+                  ? `${analytics?.auditCount} persisted deterministic audit results are available.`
+                  : `${analytics?.opportunityScoreCount} persisted deterministic scores are available.`}
+              </p>
+            ) : (
+              <EmptyState
+                title={page === "Audits" ? (title === "Digital audits" ? "No completed audits yet" : "No deterministic scores yet") : empty}
+                text={page === "Audits" ? (title === "Digital audits" ? "The deterministic audit engine is available; no completed audit results exist yet." : "The scoring engine is available; no deterministic score results exist yet.") : "This workspace has no results to display yet."}
+                icon={icon}
+              />
+            )}
           </section>
         ))}
       </div>
@@ -489,30 +524,25 @@ function WorkspacePage({
 }
 
 function AnalyticsPage() {
-  const metrics = [
-    {
-      title: "Conversion rate",
-      unit: "%",
-      max: 100,
-      meta: "No conversion data",
-    },
+  const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof getAnalytics>> | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-    {
-      title: "Outreach sent",
-      unit: "",
-      max: 1000,
-      meta: "Count · messages sent",
-    },
+  useEffect(() => {
+    void getAnalytics().then(setMetrics).catch((requestError) => {
+      setError(requestError instanceof Error ? requestError.message : "Unable to load analytics.")
+    })
+  }, [])
 
-    {
-      title: "Meetings booked",
-      unit: "",
-      max: 100,
-      meta: "Count · meetings booked",
-    },
+  const dials = [
+    { key: "conversionRate", title: "Conversion rate", unit: "%", max: 100, meta: "Won leads / all leads" },
+    { key: "outreachSent", title: "Recorded first contacts", unit: "", max: 1000, meta: "Leads with a recorded first-contact date" },
+    { key: "meetingsBooked", title: "Leads in meeting stage", unit: "", max: 100, meta: "Current MEETING lifecycle stage" },
+    { key: "replyRate", title: "Reply rate", unit: "%", max: 100, meta: "Leads in REPLIED stage / recorded first contacts" },
+  ] as const
 
-    { title: "Reply rate", unit: "%", max: 100, meta: "No outreach data" },
-  ]
+  const metricValue = (key: (typeof dials)[number]["key"]) => metrics?.[key] ?? null
+  const formatMetric = (value: number | null, unit = "") =>
+    value === null ? "—" : `${Number.isInteger(value) ? value : value.toFixed(1)}${unit}`
 
   return (
     <div className="page">
@@ -520,17 +550,27 @@ function AnalyticsPage() {
         <div>
           <p className="eyebrow">PERFORMANCE</p>
           <h1>Analytics</h1>
-          <p>No activity metrics are available yet.</p>
+          <p>Metrics are calculated from persisted lead lifecycle data.</p>
         </div>
       </div>
+      {error && <div className="mb-4 rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">{error}</div>}
+      {!metrics && !error && <div className="mb-4 text-sm text-[#a5a5a5]">Loading analytics…</div>}
       <div className="stats-grid">
-        {metrics.map((metric) => (
+        {dials.map((metric) => {
+          const value = metricValue(metric.key)
+          const max = metric.key === "outreachSent"
+            ? Math.max(1000, value ?? 0)
+            : metric.key === "meetingsBooked"
+              ? Math.max(100, value ?? 0)
+              : 100
+          return (
           <section className="panel reply-rate-dial-card" key={metric.title}>
-            <SectionHeader title={metric.title} meta={metric.meta} />
+            <SectionHeader title={metric.title} meta={metrics && value === null ? "NO DATA" : metric.meta} />
             <CometDial
-              defaultValue={0}
+              value={value}
+              readOnly
               min={0}
-              max={metric.max}
+              max={max}
               step={1}
               unit={metric.unit}
               label={metric.title}
@@ -538,24 +578,32 @@ function AnalyticsPage() {
               size={160}
             />
           </section>
-        ))}
+          )
+        })}
       </div>
       <div className="lower-grid">
         <section className="panel">
-          <SectionHeader title="Pipeline performance" />
-          <EmptyState
-            title="No performance data"
-            text="Metrics will appear when real activity is available."
-            icon="analytics"
-          />
+          <SectionHeader title="Pipeline by stage" meta={metrics?.pipeline ? "Current leads" : "No data"} />
+          {metrics?.pipeline ? (
+            <div className="horizontal-bars">
+              {LEAD_STATUSES.map((status) => {
+                const count = metrics.pipeline?.[status] ?? 0
+                const max = Math.max(1, ...Object.values(metrics.pipeline ?? {}))
+                return <div key={status}><span>{status}</span><div><i style={{ width: `${(count / max) * 100}%` }} /></div><strong>{count}</strong></div>
+              })}
+            </div>
+          ) : <EmptyState title="No pipeline data" text="Pipeline metrics appear when lead records are available." icon="analytics" />}
         </section>
         <section className="panel">
-          <SectionHeader title="Lead sources" />
-          <EmptyState
-            title="No source data"
-            text="No discovery source has supplied records."
-            icon="discovery"
-          />
+          <SectionHeader title="Lead sources" meta={metrics?.leadSources ? "Current leads" : "No data"} />
+          {metrics?.leadSources ? (
+            <div className="horizontal-bars">
+              {metrics.leadSources.map(({ source, count }) => {
+                const max = Math.max(1, ...metrics.leadSources!.map((entry) => entry.count))
+                return <div key={source}><span>{source}</span><div><i style={{ width: `${(count / max) * 100}%` }} /></div><strong>{count}</strong></div>
+              })}
+            </div>
+          ) : <EmptyState title="No source data" text="Lead source metrics appear when lead records are available." icon="discovery" />}
         </section>
       </div>
     </div>
@@ -610,20 +658,28 @@ function SettingsPage({ health }: { health: SystemHealthResponse | null }) {
                 confirmed opportunity.
               </p>
               <p>
-                No scoring rules are configured, and no scoring engine is
-                connected.
+                {health?.services.scoring.status === "AVAILABLE"
+                  ? health.services.scoring.detail
+                  : "Scoring availability could not be verified."}
               </p>
+              <p>Scores use the active deterministic ruleset and verified audit factors. Unknown evidence is not treated as a confirmed opportunity.</p>
               <p>
                 AI analysis follows validated deterministic scoring. Outreach
                 requires human approval.
               </p>
             </div>
           ) : (
-            <EmptyState
-              title="Supabase backend"
-              text="Lead persistence is served by the Node/Express API and Supabase PostgreSQL database."
-              icon="settings"
-            />
+            section === "Notifications" ? (
+              <div className="p-5 text-sm leading-7 text-[#a5a5a5]">
+                <p>Notifications are not connected to an event store or delivery service.</p>
+                <p>Future notifications should consume application events such as digital intelligence completed, audit completed, score calculated, AI analysis completed, qualification requires review, human approval required, and workflow failure.</p>
+                <p>Notifications should present events, not make business decisions.</p>
+              </div>
+            ) : <EmptyState
+                title="Supabase backend"
+                text="Lead persistence is served by the Node/Express API and Supabase PostgreSQL database."
+                icon="settings"
+              />
           )}
         </section>
       </div>

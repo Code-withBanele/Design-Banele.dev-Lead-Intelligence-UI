@@ -7,6 +7,8 @@ type SettleMeta = {
 
 type CometDialProps = {
   defaultValue?: number
+  value?: number | null
+  readOnly?: boolean
   min?: number
   max?: number
   step?: number
@@ -32,6 +34,8 @@ const clamp = (value: number, min: number, max: number) =>
 
 export default function CometDial({
   defaultValue = 0,
+  value: controlledValue,
+  readOnly = false,
   min = 0,
   max = 100,
   step = 1,
@@ -51,11 +55,16 @@ export default function CometDial({
   onChange,
   onChangeEnd,
 }: CometDialProps) {
-  const [value, setValue] = useState(() => clamp(defaultValue, min, max))
+  const [internalValue, setInternalValue] = useState(() => clamp(defaultValue, min, max))
   const [dragging, setDragging] = useState(false)
   const dialRef = useRef<HTMLDivElement>(null)
   const lastPoint = useRef({ angle: 0, time: 0, velocity: 0 })
   const raf = useRef<number | null>(null)
+
+  const hasValue = controlledValue !== null && controlledValue !== undefined
+  const value = controlledValue === undefined
+    ? internalValue
+    : clamp(controlledValue ?? min, min, max)
 
   const radius = size * 0.39
   const circumference = 2 * Math.PI * radius
@@ -103,8 +112,9 @@ export default function CometDial({
   }
 
   const updateValue = (next: number) => {
+    if (readOnly) return
     const rounded = clamp(Math.round(next / step) * step, min, max)
-    setValue(rounded)
+    setInternalValue(rounded)
     onChange?.(rounded)
   }
 
@@ -131,7 +141,7 @@ export default function CometDial({
   return (
     <div
       ref={dialRef}
-      className={`comet-dial ${dragging ? "is-dragging" : ""}`}
+      className={`comet-dial ${dragging ? "is-dragging" : ""} ${readOnly ? "is-read-only" : ""}`}
       style={
         {
           width: size,
@@ -143,13 +153,15 @@ export default function CometDial({
           "--comet-bounce": tapBounce,
         } as React.CSSProperties
       }
-      role="slider"
-      aria-label={label}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={value}
-      tabIndex={0}
+      role={readOnly ? "img" : "slider"}
+      aria-label={hasValue ? `${label}: ${value}${unit}` : `${label}: No data`}
+      aria-valuemin={readOnly ? undefined : min}
+      aria-valuemax={readOnly ? undefined : max}
+      aria-valuenow={readOnly && !hasValue ? undefined : value}
+      aria-valuetext={readOnly && !hasValue ? "No data" : undefined}
+      tabIndex={readOnly ? -1 : 0}
       onKeyDown={(event) => {
+        if (readOnly) return
         if (event.key === "ArrowRight" || event.key === "ArrowUp") {
           event.preventDefault()
           updateValue(value + step)
@@ -160,6 +172,7 @@ export default function CometDial({
         }
       }}
       onPointerDown={(event) => {
+        if (readOnly) return
         event.currentTarget.setPointerCapture(event.pointerId)
         const angle = angleFromPointer(event.clientX, event.clientY)
         lastPoint.current = { angle, time: performance.now(), velocity: 0 }
@@ -167,6 +180,7 @@ export default function CometDial({
         updateValue(valueFromAngle(angle))
       }}
       onPointerMove={(event) => {
+        if (readOnly) return
         if (!dragging) return
         const angle = angleFromPointer(event.clientX, event.clientY)
         const now = performance.now()
@@ -182,6 +196,7 @@ export default function CometDial({
         updateValue(valueFromAngle(angle))
       }}
       onPointerUp={() => {
+        if (readOnly) return
         setDragging(false)
         settle(
           lastPoint.current.velocity,
@@ -268,10 +283,10 @@ export default function CometDial({
       <div className="comet-readout">
         <span>{label}</span>
         <strong>
-          {value}
-          <small>{unit}</small>
+          {hasValue ? value : "—"}
+          {hasValue && <small>{unit}</small>}
         </strong>
-        <em>Drag to adjust</em>
+        <em>{readOnly ? (hasValue ? "Application data" : "No data") : "Drag to adjust"}</em>
       </div>
     </div>
   )

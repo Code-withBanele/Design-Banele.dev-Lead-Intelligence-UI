@@ -40,11 +40,41 @@ test("missing Supabase configuration is reported without crashing the process", 
     const { getSystemHealthStatus } = await import("./systemHealthService.js")
     const result = await getSystemHealthStatus()
 
-    assert.equal(result.status, "error")
-    assert.equal(result.services.database.status, "ERROR")
+    assert.equal(result.status, "degraded")
+    assert.equal(result.services.database.status, "NOT_CONFIGURED")
     assert.match(result.services.database.detail ?? "", /not configured/i)
   } finally {
     if (previousUrl) process.env.SUPABASE_URL = previousUrl
     if (previousKey) process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey
   }
+})
+
+test("AI credentials report CONFIGURED rather than provider connectivity", async () => {
+  const previousKey = process.env.OPENROUTER_API_KEY
+
+  process.env.OPENROUTER_API_KEY = "test-configured-value"
+
+  try {
+    const { getSystemHealthStatus } = await import("./systemHealthService.js")
+    const result = await getSystemHealthStatus()
+
+    assert.equal(result.services.ai.status, "CONFIGURED")
+    assert.notEqual(result.services.ai.status, "CONNECTED")
+    assert.equal(result.services.n8n.status, "NOT_CONFIGURED")
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY
+    else process.env.OPENROUTER_API_KEY = previousKey
+  }
+})
+
+test("database failures remain visible in health status", async () => {
+  const { getSystemHealthStatus } = await import("./systemHealthService.js")
+  const result = await getSystemHealthStatus(async () => ({
+    data: null,
+    error: { message: "Database probe failed." },
+  }))
+
+  assert.equal(result.status, "degraded")
+  assert.equal(result.services.database.status, "ERROR")
+  assert.match(result.services.database.detail ?? "", /Database probe failed/)
 })

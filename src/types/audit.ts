@@ -41,6 +41,7 @@ export type OpportunityScoreResult = {
   score: number
   classification: OpportunityScoreClassification
   rulesetVersion: string
+  factorWeights?: Partial<Record<DigitalAuditFactorKey, number>>
   calculatedAt: string
   contributingFactors: string[]
 }
@@ -94,6 +95,8 @@ export type DigitalEvidenceSourceType = "website" | "google" | "social" | "exter
 
 export type DigitalEvidenceConfidence = "high" | "medium" | "low"
 
+export type EvidenceObservationStatus = "FOUND" | "NOT_FOUND" | "UNKNOWN" | "FAILED"
+
 export type DigitalEvidence = {
   id?: string
   leadId: string
@@ -104,6 +107,7 @@ export type DigitalEvidence = {
   sourceUrl?: string | null
   sourceType: DigitalEvidenceSourceType
   confidence: DigitalEvidenceConfidence
+  observationStatus?: EvidenceObservationStatus
   collectedAt: string
   metadata?: Record<string, unknown>
 }

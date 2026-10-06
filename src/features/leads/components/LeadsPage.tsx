@@ -26,6 +26,24 @@ import { useSessionLeads } from "../hooks/useSessionLeads"
 
 import { AddLeadForm } from "./AddLeadForm"
 
+const auditFactorLabels: Record<string, string> = {
+  hasWebsite: "Website",
+  hasGoogleBusinessProfile: "Google Business Profile",
+  hasActiveSocial: "Active Social",
+  hasOnlineOrdering: "Online Ordering",
+  hasOnlineBooking: "Online Booking",
+  hasWhatsApp: "WhatsApp",
+  hasContactMethod: "Contact Method",
+  hasMobileFriendlyWebsite: "Mobile Friendly Website",
+  hasStrongCTA: "Strong CTA",
+  hasBasicSEO: "Basic SEO",
+  hasVisibleBusinessInformation: "Visible Business Information",
+}
+
+function formatAuditFactor(key: string) {
+  return auditFactorLabels[key] ?? key
+}
+
 export function LeadPage() {
   const sessionLeads = useSessionLeads()
 
@@ -162,19 +180,43 @@ export function LeadPage() {
             )}
           </div>
           {auditSummary && (
-            <div className="grid gap-2 md:grid-cols-2">
-              {auditSummary.factors.slice(0, 6).map((factor) => (
-                <div
-                  key={factor.key}
-                  className="flex items-center justify-between rounded border border-[#222] bg-[#111111] px-3 py-2 text-sm"
-                >
-                  <span className="text-[#d4d4d4]">{factor.key}</span>
-                  <span className="text-[#f5f5f5]">
-                    {factor.value === null ? "?" : factor.value ? "✓" : "✕"}
-                  </span>
-                </div>
-              ))}
-            </div>
+            <details className="mt-3 border-t border-[#303030] pt-3">
+              <summary className="cursor-pointer text-sm font-medium text-white">
+                Inspect all {auditSummary.factors.length} audit factors
+              </summary>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {auditSummary.factors.map((factor) => {
+                  const value = factor.value
+                  const state = value === null ? "UNKNOWN" : value ? "FOUND" : "NOT FOUND"
+                  const weight = opportunityScore?.factorWeights?.[factor.key]
+                  return (
+                    <div
+                      key={factor.key}
+                      className="rounded border border-[#222] bg-[#111111] px-3 py-2 text-sm"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[#d4d4d4]">{formatAuditFactor(factor.key)}</span>
+                        <strong className={value === null ? "text-amber-300" : value ? "text-emerald-300" : "text-red-300"}>
+                          {state}
+                        </strong>
+                      </div>
+                      <div className="mt-1 flex justify-between gap-3 text-xs text-[#a5a5a5]">
+                        <span>{weight === undefined ? "Weight unavailable" : `Weight +${weight}`}</span>
+                        <span>{factor.status}</span>
+                      </div>
+                      <p className="mt-1 break-all text-xs text-[#a5a5a5]">
+                        {factor.evidence || "No evidence source recorded."}
+                      </p>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="mt-2 text-xs text-[#a5a5a5]">
+                {opportunityScore
+                  ? `Ruleset ${opportunityScore.rulesetVersion}; calculated ${new Date(opportunityScore.calculatedAt).toLocaleString()}.`
+                  : `Audit version ${auditSummary.auditVersion}; no calculated score is available.`}
+              </p>
+            </details>
           )}
           {opportunityScore && (
             <div className="mt-3 text-sm text-[#d4d4d4]">
@@ -278,13 +320,22 @@ export function LeadPage() {
             )}
           </div>
           <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center">
-            <input
-              aria-label="Website URL"
-              className="w-full rounded border border-[#303030] bg-[#101010] px-3 py-2 text-sm text-white placeholder:text-[#6b7280]"
-              placeholder="https://example.com"
-              value={websiteUrl}
-              onChange={(event) => setWebsiteUrl(event.target.value)}
-            />
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <label className="text-xs text-[#a5a5a5]" htmlFor="known-website-source">
+                Known website / manual source
+              </label>
+              <input
+                id="known-website-source"
+                aria-label="Known website or manual source URL"
+                className="w-full rounded border border-[#303030] bg-[#101010] px-3 py-2 text-sm text-white placeholder:text-[#6b7280]"
+                placeholder="https://example.com"
+                value={websiteUrl}
+                onChange={(event) => setWebsiteUrl(event.target.value)}
+              />
+              <span className="text-xs text-[#a5a5a5]">
+                The supplied URL is the collector source; it is not automatically discovered.
+              </span>
+            </div>
             <button
               type="button"
               className="rounded border border-[#303030] bg-[#111111] px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
@@ -315,6 +366,16 @@ export function LeadPage() {
               {digitalCollectionError}
             </div>
           )}
+          {digitalIntelligence?.warnings?.length ? (
+            <div className="mb-3 rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+              {digitalIntelligence.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+            </div>
+          ) : null}
+          {digitalIntelligence?.errorMessages?.length ? (
+            <div className="mb-3 rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+              {digitalIntelligence.errorMessages.map((message) => <p key={message}>{message}</p>)}
+            </div>
+          ) : null}
           {digitalIntelligence ? (
             <div className="grid gap-3 text-sm text-[#d4d4d4] md:grid-cols-3">
               <div className="rounded border border-[#222] bg-[#111111] p-3">

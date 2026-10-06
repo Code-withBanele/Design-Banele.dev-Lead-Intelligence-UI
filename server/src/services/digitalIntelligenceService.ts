@@ -1,4 +1,5 @@
 import { isIP } from "node:net"
+import { lookup } from "node:dns/promises"
 
 import { supabase } from "../db/supabase.js"
 import { getLeadById } from "./leadService.js"
@@ -6,6 +7,7 @@ import { calculateLeadOpportunityScore } from "./opportunityScoreService.js"
 import { upsertLeadAudit } from "./digitalAuditService.js"
 
 export const DIGITAL_INTELLIGENCE_COLLECTOR_VERSION = "v1"
+export const BASIC_SEO_SIGNAL_THRESHOLD = 2
 
 export type DigitalIntelligenceStatus =
   | "QUEUED"
@@ -27,6 +29,7 @@ export type DigitalIntelligenceCategory =
 
 export type DigitalEvidenceSourceType = "website" | "google" | "social" | "external"
 export type DigitalEvidenceConfidence = "high" | "medium" | "low"
+export type DigitalEvidenceObservationStatus = "FOUND" | "NOT_FOUND" | "UNKNOWN" | "FAILED"
 
 export type DigitalEvidence = {
   id?: string
@@ -38,6 +41,7 @@ export type DigitalEvidence = {
   sourceUrl?: string | null
   sourceType: DigitalEvidenceSourceType
   confidence: DigitalEvidenceConfidence
+  observationStatus?: DigitalEvidenceObservationStatus
   collectedAt: string
   metadata?: Record<string, unknown>
 }
@@ -81,45 +85,73 @@ export const DIGITAL_INTELLIGENCE_CONFIG = {
   requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 10000),
   maxRedirects: Number(process.env.MAX_REDIRECTS ?? 5),
   maxResponseSize: Number(process.env.MAX_RESPONSE_SIZE ?? 1200000),
+  maxRequestsPerRun: Number(process.env.MAX_REQUESTS_PER_RUN ?? 25),
 }
 
 function isPrivateIp(hostname: string): boolean {
-  if (!hostname || hostname === "localhost") return true
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase()
+  const family = isIP(host)
 
-  if (hostname.includes(":")) {
-    return hostname === "::1" || hostname === "[::1]"
+  if (family === 4) {
+    const [first, second, third] = host.split(".").map(Number)
+    return (
+      first === 0 ||
+      first === 10 ||
+      first === 127 ||
+      (first === 100 && second >= 64 && second <= 127) ||
+      (first === 169 && second === 254) ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168) ||
+      (first === 192 && second === 0 && third === 0) ||
+      (first === 192 && second === 0 && third === 2) ||
+      (first === 198 && (second === 18 || second === 19)) ||
+      (first === 198 && second === 51 && third === 100) ||
+      (first === 203 && second === 0 && third === 113) ||
+      first >= 224
+    )
   }
 
-  if (hostname.startsWith("[") && hostname.endsWith("]")) {
-    return hostname.slice(1, -1) === "::1"
+  if (family !== 6) return false
+
+  const expanded = expandIpv6(host)
+  if (!expanded) return true
+
+  const groups = expanded.split(":").map((group) => Number.parseInt(group, 16))
+  const mappedIpv4Prefix = groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff
+  if (mappedIpv4Prefix) {
+    const mappedIpv4 = `${groups[6] >> 8}.${groups[6] & 255}.${groups[7] >> 8}.${groups[7] & 255}`
+    return isPrivateIp(mappedIpv4)
+  }
+  const allZeroPrefix = groups.slice(0, 6).every((group) => group === 0)
+  if (allZeroPrefix) {
+    const mappedIpv4 = `${groups[6] >> 8}.${groups[6] & 255}.${groups[7] >> 8}.${groups[7] & 255}`
+    return isPrivateIp(mappedIpv4) || groups[6] === 0 && groups[7] <= 1
   }
 
-  if (isIP(hostname) === 0) return false
+  return (groups[0] & 0xfe00) === 0xfc00 || (groups[0] & 0xffc0) === 0xfe80 || (groups[0] & 0xffc0) === 0xfec0
+}
 
-  const addr = hostname.split(".").map(Number)
-
-  if (addr.length !== 4 || addr.some((part) => Number.isNaN(part))) {
-    return false
-  }
-
-  return (
-    addr[0] === 10 ||
-    (addr[0] === 172 && addr[1] >= 16 && addr[1] <= 31) ||
-    (addr[0] === 192 && addr[1] === 168) ||
-    (addr[0] === 127) ||
-    (addr[0] === 0 && addr[1] === 0 && addr[2] === 0 && addr[3] === 0)
-  )
+function expandIpv6(host: string): string | null {
+  if (host.includes("%")) return null
+  const halves = host.split("::")
+  if (halves.length > 2) return null
+  const parseHalf = (half: string) => half ? half.split(":") : []
+  const left = parseHalf(halves[0])
+  const right = parseHalf(halves[1] ?? "")
+  const missing = 8 - left.length - right.length
+  if ((halves.length === 1 && missing !== 0) || (halves.length === 2 && missing < 1)) return null
+  const groups = [...left, ...Array(missing).fill("0"), ...right]
+  if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group))) return null
+  return groups.map((group) => Number.parseInt(group, 16).toString(16).padStart(4, "0")).join(":")
 }
 
 function isBlockedHostname(hostname: string): boolean {
-  const host = hostname.toLowerCase().trim()
+  const host = hostname.toLowerCase().trim().replace(/\.$/, "")
 
   if (!host) return true
   if (host === "localhost" || host.endsWith(".localhost")) return true
   if (host === "localhost.localdomain") return true
-  if (host === "127.0.0.1" || host === "0.0.0.0" || host === "::1") return true
-  if (host.startsWith("10.") || host.startsWith("192.168.") || host.startsWith("172.")) return true
-  if (host.includes(".internal") || host.includes(".local")) return true
+  if (host.endsWith(".localdomain") || host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan") || host.endsWith(".home.arpa")) return true
 
   return isPrivateIp(host)
 }
@@ -152,11 +184,50 @@ export function validateWebsiteUrl(rawUrl: string): string {
   return url.toString().replace(/\/$/, "")
 }
 
-async function fetchWithTimeout(url: string, timeoutMs: number, maxRedirects: number) {
-  let currentUrl = url
+type HostResolver = (hostname: string) => Promise<Array<{ address: string }>>
+
+async function resolveHostname(hostname: string) {
+  return lookup(hostname, { all: true, verbatim: true })
+}
+
+export async function validateResolvedWebsiteUrl(
+  rawUrl: string,
+  resolver: HostResolver = resolveHostname,
+): Promise<string> {
+  const validatedUrl = validateWebsiteUrl(rawUrl)
+  const hostname = new URL(validatedUrl).hostname.replace(/^\[|\]$/g, "")
+
+  if (isIP(hostname)) return validatedUrl
+
+  let addresses: Array<{ address: string }>
+  try {
+    addresses = await resolver(hostname)
+  } catch {
+    throw new Error("The website hostname could not be safely resolved.")
+  }
+
+  if (!addresses.length || addresses.some(({ address }) => isPrivateIp(address))) {
+    throw new Error("The website hostname resolves to a blocked local or private network address.")
+  }
+
+  return validatedUrl
+}
+
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs: number,
+  maxRedirects: number,
+  requestBudget: { count: number; limit: number },
+  resolver: HostResolver,
+) {
+  let currentUrl = await validateResolvedWebsiteUrl(url, resolver)
   const history: string[] = []
 
   for (let redirectRound = 0; redirectRound <= maxRedirects; redirectRound += 1) {
+    if (requestBudget.count >= requestBudget.limit) {
+      throw new Error("The collection request limit was reached.")
+    }
+    requestBudget.count += 1
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -177,13 +248,38 @@ async function fetchWithTimeout(url: string, timeoutMs: number, maxRedirects: nu
       if (isRedirect && location) {
         history.push(currentUrl)
         const nextTarget = new URL(location, currentUrl)
-        validateWebsiteUrl(nextTarget.toString())
-        const nextUrl = nextTarget.toString().replace(/\/$/, "")
+        const nextUrl = await validateResolvedWebsiteUrl(nextTarget.toString(), resolver)
         currentUrl = nextUrl
         continue
       }
 
-      const contents = await response.text()
+      let contents = ""
+      if (response.body) {
+        const reader = response.body.getReader()
+        const chunks: Uint8Array[] = []
+        let size = 0
+        let streamEnded = false
+        while (size < DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize) {
+          const { done, value } = await reader.read()
+          if (done) {
+            streamEnded = true
+            break
+          }
+          const chunk = value.subarray(0, DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize - size)
+          chunks.push(chunk)
+          size += chunk.byteLength
+          if (chunk.byteLength !== value.byteLength) {
+            await reader.cancel()
+            streamEnded = true
+            break
+          }
+        }
+        if (!streamEnded) await reader.cancel()
+        contents = Buffer.concat(chunks).toString("utf8")
+      } else {
+        contents = (await response.text()).slice(0, DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize)
+      }
+
       return {
         status: response.status,
         ok: response.ok,
@@ -252,8 +348,6 @@ export function detectPageSignals(html: string): {
   canonical: string | null
   viewport: boolean
   hasStructuredData: boolean
-  robotsTxt: boolean
-  sitemap: boolean
   hasGoogleMaps: boolean
 } {
   const title = coerceString(html.match(/<title[^>]*>(.*?)<\/title>/is)?.[1])
@@ -266,8 +360,6 @@ export function detectPageSignals(html: string): {
   )
   const viewport = /<meta[^>]+name=["']viewport["']/i.test(html)
   const hasStructuredData = /\{\s*"@context"|\{\s*"@type"|\<script[^>]*type=["']application\/ld\+json["']/is.test(html)
-  const robotsTxt = /robots\.txt/i.test(html)
-  const sitemap = /sitemap\.(xml|xsl|html)|<loc>.*sitemap/i.test(html)
   const hasGoogleMaps = /maps\.google\.|google\.com\/maps|google\.com\/maps\?/i.test(html)
 
   return {
@@ -276,8 +368,6 @@ export function detectPageSignals(html: string): {
     canonical,
     viewport,
     hasStructuredData,
-    robotsTxt,
-    sitemap,
     hasGoogleMaps,
   }
 }
@@ -445,6 +535,24 @@ export function extractEvidenceFromHtml(
   }
 
   const signals = detectPageSignals(html)
+  const addSignal = (
+    key: string,
+    found: boolean,
+    value: unknown = true,
+    category: DigitalIntelligenceCategory = "seo",
+  ) => {
+    evidence.push({
+      leadId: "",
+      category,
+      key,
+      value: found ? value : null,
+      sourceUrl,
+      sourceType: "website",
+      confidence: found ? "medium" : "high",
+      observationStatus: found ? "FOUND" : "NOT_FOUND",
+      collectedAt: new Date().toISOString(),
+    })
+  }
 
   if (signals.title) {
     evidence.push({
@@ -458,6 +566,8 @@ export function extractEvidenceFromHtml(
       collectedAt: new Date().toISOString(),
       metadata: { title: signals.title },
     })
+  } else {
+    addSignal("page_title", false)
   }
 
   if (signals.metaDescription) {
@@ -472,6 +582,8 @@ export function extractEvidenceFromHtml(
       collectedAt: new Date().toISOString(),
       metadata: { description: signals.metaDescription },
     })
+  } else {
+    addSignal("meta_description", false)
   }
 
   if (signals.canonical) {
@@ -486,20 +598,25 @@ export function extractEvidenceFromHtml(
       collectedAt: new Date().toISOString(),
       metadata: { canonical: signals.canonical },
     })
+  } else {
+    addSignal("canonical_url", false)
   }
 
   if (signals.viewport) {
     evidence.push({
       leadId: "",
       category: "technology",
-      key: "viewport_meta",
+      key: "viewport_meta_present",
       value: true,
       sourceUrl,
       sourceType: "website",
       confidence: "medium",
+      observationStatus: "FOUND",
       collectedAt: new Date().toISOString(),
       metadata: { viewport: true },
     })
+  } else {
+    addSignal("viewport_meta_present", false, false, "technology")
   }
 
   if (signals.hasStructuredData) {
@@ -514,20 +631,8 @@ export function extractEvidenceFromHtml(
       collectedAt: new Date().toISOString(),
       metadata: { structuredData: true },
     })
-  }
-
-  if (/robots\.txt/i.test(lowerHtml)) {
-    evidence.push({
-      leadId: "",
-      category: "seo",
-      key: "robots_txt_reference",
-      value: true,
-      sourceUrl,
-      sourceType: "website",
-      confidence: "medium",
-      collectedAt: new Date().toISOString(),
-      metadata: { robotsTxt: true },
-    })
+  } else {
+    addSignal("structured_data", false)
   }
 
   if (extractBusinessName(html, sourceUrl)) {
@@ -542,6 +647,23 @@ export function extractEvidenceFromHtml(
       collectedAt: new Date().toISOString(),
       metadata: { businessName: extractBusinessName(html, sourceUrl) },
     })
+  } else {
+    addSignal("business_name", false, false, "website")
+  }
+
+  const observedKeys = [
+    ["whatsapp_link", /wa\.me|whatsapp\.com|api\.whatsapp\.com/i.test(lowerHtml), "contact"],
+    ["email_address", emails.length > 0, "contact"],
+    ["phone_number", phones.length > 0, "contact"],
+    ["social_profile", evidence.some((entry) => entry.key === "social_profile"), "social"],
+    ["google_maps_link", evidence.some((entry) => entry.key === "google_maps_link"), "google_business"],
+    ["booking_link", evidence.some((entry) => entry.key === "booking_link"), "booking"],
+    ["ordering_link", evidence.some((entry) => entry.key === "ordering_link"), "ordering"],
+    ["cta", evidence.some((entry) => entry.key === "cta"), "website"],
+  ] as const
+
+  for (const [key, found, category] of observedKeys) {
+    if (!found) addSignal(key, false, false, category)
   }
 
   const websiteReachableEvidence = {
@@ -562,15 +684,20 @@ export function extractEvidenceFromHtml(
 }
 
 export async function crawlWebsite(url: string) {
-  const seededUrl = validateWebsiteUrl(url)
+  return crawlWebsiteWithResolver(url, resolveHostname)
+}
+
+export async function crawlWebsiteWithResolver(url: string, resolver: HostResolver) {
+  const seededUrl = await validateResolvedWebsiteUrl(url, resolver)
   const pageQueue = [{ url: seededUrl, depth: 0 }]
   const visitedUrls = new Set<string>()
   const pages: Array<{ url: string; status: number; body: string; contentType: string; history: string[] }> = []
   const warnings: string[] = []
   const errors: string[] = []
-  const requestsMade = { count: 0 }
+  let incomplete = false
+  const requestBudget = { count: 0, limit: DIGITAL_INTELLIGENCE_CONFIG.maxRequestsPerRun }
 
-  while (pageQueue.length > 0 && pages.length < DIGITAL_INTELLIGENCE_CONFIG.maxPagesPerRun) {
+  while (pageQueue.length > 0 && pages.length < DIGITAL_INTELLIGENCE_CONFIG.maxPagesPerRun && requestBudget.count < requestBudget.limit) {
     const current = pageQueue.shift()
     if (!current) break
     const normalized = new URL(current.url).toString().replace(/\/$/, "")
@@ -582,9 +709,10 @@ export async function crawlWebsite(url: string) {
         normalized,
         DIGITAL_INTELLIGENCE_CONFIG.requestTimeoutMs,
         DIGITAL_INTELLIGENCE_CONFIG.maxRedirects,
+        requestBudget,
+        resolver,
       )
 
-      requestsMade.count += 1
       pages.push({
         url: response.finalUrl,
         status: response.status,
@@ -595,6 +723,11 @@ export async function crawlWebsite(url: string) {
 
       if (!response.ok) {
         warnings.push(`Page ${normalized} responded with ${response.status}.`)
+        incomplete = true
+      }
+      if (!response.contentType.toLowerCase().includes("html")) {
+        warnings.push(`Page ${normalized} did not return HTML; page evidence remains unknown.`)
+        incomplete = true
       }
 
       if (current.depth >= DIGITAL_INTELLIGENCE_CONFIG.maxDepth) continue
@@ -620,26 +753,196 @@ export async function crawlWebsite(url: string) {
     }
   }
 
-  return { pages, warnings, errors, requestsMade: requestsMade.count }
+  if (pageQueue.length && requestBudget.count >= requestBudget.limit) {
+    warnings.push("The collection request limit was reached before all queued pages were checked.")
+    incomplete = true
+  }
+  if (pageQueue.length && pages.length >= DIGITAL_INTELLIGENCE_CONFIG.maxPagesPerRun) {
+    warnings.push("The page limit was reached before all queued pages were checked.")
+    incomplete = true
+  }
+
+  const resourceEvidence: DigitalEvidence[] = []
+  const resourceOrigin = new URL(pages[0]?.url ?? seededUrl).origin
+  for (const [path, key] of [["/robots.txt", "robots_txt_available"], ["/sitemap.xml", "sitemap_available"]] as const) {
+    const resourceUrl = new URL(path, resourceOrigin).toString()
+    if (requestBudget.count >= requestBudget.limit) {
+      warnings.push(`Skipped ${path} because the request limit was reached.`)
+      incomplete = true
+      resourceEvidence.push({
+        leadId: "",
+        category: "seo",
+        key,
+        value: null,
+        sourceUrl: resourceUrl,
+        sourceType: "website",
+        confidence: "low",
+        observationStatus: "UNKNOWN",
+        collectedAt: new Date().toISOString(),
+        metadata: { reason: "request_limit" },
+      })
+      continue
+    }
+
+    try {
+      const response = await fetchWithTimeout(
+        resourceUrl,
+        DIGITAL_INTELLIGENCE_CONFIG.requestTimeoutMs,
+        DIGITAL_INTELLIGENCE_CONFIG.maxRedirects,
+        requestBudget,
+        resolver,
+      )
+      if (response.status === 200) {
+        resourceEvidence.push({
+          leadId: "",
+          category: "seo",
+          key,
+          value: response.finalUrl,
+          sourceUrl: response.finalUrl,
+          sourceType: "website",
+          confidence: "high",
+          observationStatus: "FOUND",
+          collectedAt: new Date().toISOString(),
+          metadata: { status: response.status },
+        })
+      } else if (response.status === 404) {
+        resourceEvidence.push({
+          leadId: "",
+          category: "seo",
+          key,
+          value: false,
+          sourceUrl: response.finalUrl,
+          sourceType: "website",
+          confidence: "high",
+          observationStatus: "NOT_FOUND",
+          collectedAt: new Date().toISOString(),
+          metadata: { status: response.status },
+        })
+      } else {
+        warnings.push(`${path} returned ${response.status}; availability remains unknown.`)
+        incomplete = true
+        resourceEvidence.push({
+          leadId: "",
+          category: "seo",
+          key,
+          value: null,
+          sourceUrl: response.finalUrl,
+          sourceType: "website",
+          confidence: "low",
+          observationStatus: "UNKNOWN",
+          collectedAt: new Date().toISOString(),
+          metadata: { status: response.status },
+        })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Failed to verify ${path}.`
+      errors.push(message)
+      incomplete = true
+      resourceEvidence.push({
+        leadId: "",
+        category: "seo",
+        key,
+        value: null,
+        sourceUrl: resourceUrl,
+        sourceType: "website",
+        confidence: "low",
+        observationStatus: "FAILED",
+        collectedAt: new Date().toISOString(),
+      })
+    }
+  }
+
+  return {
+    pages,
+    warnings,
+    errors,
+    requestsMade: requestBudget.count,
+    complete: !incomplete && errors.length === 0 && pageQueue.length === 0 && requestBudget.count < requestBudget.limit,
+    evidence: resourceEvidence,
+  }
 }
 
-export function mapEvidenceToAuditInput(evidence: DigitalEvidence[]): Record<string, unknown> {
+export function mapEvidenceToAuditInput(
+  evidence: DigitalEvidence[],
+  collectionComplete = false,
+): Record<string, unknown> {
   const result: Record<string, unknown> = {}
 
-  const findKey = (key: string) => evidence.some((entry) => entry.key === key)
+  const stateFor = (key: string): "FOUND" | "NOT_FOUND" | "UNKNOWN" | "FAILED" => {
+    const matching = evidence.filter((entry) => entry.key === key)
+    if (matching.some((entry) => entry.observationStatus === "FOUND" || entry.observationStatus === undefined && entry.value !== null && entry.value !== false)) return "FOUND"
+    if (matching.some((entry) => entry.observationStatus === "FAILED")) return "FAILED"
+    if (matching.some((entry) => entry.observationStatus === "NOT_FOUND")) return "NOT_FOUND"
+    return "UNKNOWN"
+  }
+  const found = (...keys: string[]) => keys.some((key) => stateFor(key) === "FOUND")
+  const knownAbsent = (...keys: string[]) => collectionComplete && keys.every((key) => stateFor(key) === "NOT_FOUND")
+  const detail = (keys: string[], value: boolean | null) => {
+    const observed = evidence.find((entry) =>
+      keys.includes(entry.key) &&
+      (entry.observationStatus === "FOUND" || entry.observationStatus === undefined && entry.value !== null && entry.value !== false),
+    )
+    const absent = evidence.find((entry) => keys.includes(entry.key) && entry.observationStatus === "NOT_FOUND")
+    const failed = evidence.find((entry) => keys.includes(entry.key) && entry.observationStatus === "FAILED")
+    const observedState = value === null ? "UNKNOWN" : value ? "FOUND" : "NOT_FOUND"
+    const evidenceText = observed
+      ? `${observed.key}${observed.sourceUrl ? ` at ${observed.sourceUrl}` : ""}`
+      : absent && collectionComplete
+        ? `Not found in completed collection${absent.sourceUrl ? ` at ${absent.sourceUrl}` : ""}`
+        : failed
+          ? "Collection failed; state remains unknown"
+          : "No conclusive evidence collected"
 
-  result.hasWebsite = findKey("website_reachable") ? true : null
-  result.hasGoogleBusinessProfile = findKey("google_maps_link") ? true : null
-  result.hasActiveSocial = evidence.some((entry) => entry.category === "social" && entry.key === "social_profile") ? true : null
-  result.hasWhatsApp = findKey("whatsapp_link") ? true : null
-  result.hasContactMethod = findKey("phone_number") || findKey("email_address") ? true : null
-  result.hasOnlineBooking = findKey("booking_link") ? true : null
-  result.hasOnlineOrdering = findKey("ordering_link") ? true : null
-  result.hasStrongCTA = findKey("cta") ? true : null
-  result.hasBasicSEO = findKey("page_title") || findKey("meta_description") || findKey("canonical_url") ? true : null
-  result.hasVisibleBusinessInformation =
-    findKey("business_name") || findKey("phone_number") || findKey("email_address") ? true : null
-  result.hasMobileFriendlyWebsite = findKey("viewport_meta") ? true : null
+    return { value, status: value === null ? "UNKNOWN" : "KNOWN", evidence: `${observedState}: ${evidenceText}` }
+  }
+  const valueFor = (keys: string[]) => {
+    if (found(...keys)) return true
+    if (knownAbsent(...keys)) return false
+    return null
+  }
+  const seoSignals = ["page_title", "meta_description", "canonical_url", "structured_data"]
+  const foundSeoSignals = seoSignals.filter((key) => stateFor(key) === "FOUND").length
+  const allSeoSignalsObserved = collectionComplete && seoSignals.every((key) => stateFor(key) === "FOUND" || stateFor(key) === "NOT_FOUND")
+
+  const website = valueFor(["website_reachable"])
+  const googleBusiness = valueFor(["google_maps_link"])
+  const activeSocial = valueFor(["social_profile"])
+  const whatsapp = valueFor(["whatsapp_link"])
+  const contact = found("phone_number", "email_address")
+    ? true
+    : knownAbsent("phone_number", "email_address")
+      ? false
+      : null
+  const booking = valueFor(["booking_link"])
+  const ordering = valueFor(["ordering_link"])
+  const cta = valueFor(["cta"])
+  const seo = foundSeoSignals >= 2 ? true : allSeoSignalsObserved ? false : null
+  const businessInfo = found("business_name", "phone_number", "email_address")
+    ? true
+    : knownAbsent("business_name", "phone_number", "email_address")
+      ? false
+      : null
+  const mobile = null
+
+  result.hasWebsite = detail(["website_reachable"], website)
+  result.hasGoogleBusinessProfile = detail(["google_maps_link"], googleBusiness)
+  result.hasActiveSocial = detail(["social_profile"], activeSocial)
+  result.hasWhatsApp = detail(["whatsapp_link"], whatsapp)
+  result.hasContactMethod = detail(["phone_number", "email_address"], contact)
+  result.hasOnlineBooking = detail(["booking_link"], booking)
+  result.hasOnlineOrdering = detail(["ordering_link"], ordering)
+  result.hasStrongCTA = detail(["cta"], cta)
+  result.hasBasicSEO = {
+    ...detail(seoSignals, seo),
+    evidence: `${seo === null ? "UNKNOWN" : seo ? "FOUND" : "NOT FOUND"}: ${foundSeoSignals}/4 explicit SEO signals; threshold ${BASIC_SEO_SIGNAL_THRESHOLD}/4 (title, description, canonical, structured data).`,
+  }
+  result.hasVisibleBusinessInformation = detail(["business_name", "phone_number", "email_address"], businessInfo)
+  result.hasMobileFriendlyWebsite = {
+    ...detail(["viewport_meta_present"], mobile),
+    evidence: stateFor("viewport_meta_present") === "FOUND"
+      ? "UNKNOWN: viewport meta is present; mobile responsiveness has not been verified"
+      : "UNKNOWN: mobile responsiveness has not been verified",
+  }
 
   return result
 }
@@ -682,9 +985,39 @@ export async function collectDigitalIntelligence(leadId: string, request: Digita
     warnings = result.warnings
     errors = result.errors
 
-    const evidence: DigitalEvidence[] = []
+    const evidence: DigitalEvidence[] = [...result.evidence]
 
     for (const page of result.pages) {
+      if (page.status < 200 || page.status >= 300) {
+        evidence.push({
+          leadId,
+          runId,
+          category: "technical",
+          key: "page_collection",
+          value: { status: page.status },
+          sourceUrl: page.url,
+          sourceType: "website",
+          confidence: "low",
+          observationStatus: "FAILED",
+          collectedAt: new Date().toISOString(),
+        })
+        continue
+      }
+      if (!page.contentType.toLowerCase().includes("html")) {
+        evidence.push({
+          leadId,
+          runId,
+          category: "technical",
+          key: "page_content",
+          value: { contentType: page.contentType },
+          sourceUrl: page.url,
+          sourceType: "website",
+          confidence: "low",
+          observationStatus: "UNKNOWN",
+          collectedAt: new Date().toISOString(),
+        })
+        continue
+      }
       const pageEvidence = extractEvidenceFromHtml(page.body, page.url, "website")
       for (const entry of pageEvidence) {
         evidence.push({
@@ -693,6 +1026,21 @@ export async function collectDigitalIntelligence(leadId: string, request: Digita
           runId,
         })
       }
+    }
+
+    if (errors.length) {
+      evidence.push({
+        leadId,
+        runId,
+        category: "technical",
+        key: "collection_status",
+        value: { errors },
+        sourceUrl: validatedUrl,
+        sourceType: "website",
+        confidence: "low",
+        observationStatus: "FAILED",
+        collectedAt: new Date().toISOString(),
+      })
     }
 
     const deduped = evidence.filter((entry, index, items) => {
@@ -710,6 +1058,7 @@ export async function collectDigitalIntelligence(leadId: string, request: Digita
         source_url: entry.sourceUrl ?? null,
         source_type: entry.sourceType,
         confidence: entry.confidence,
+        observation_status: entry.observationStatus ?? (entry.value === null ? "UNKNOWN" : "FOUND"),
         collected_at: entry.collectedAt,
         metadata: entry.metadata ?? {},
       })),
@@ -719,11 +1068,13 @@ export async function collectDigitalIntelligence(leadId: string, request: Digita
       throw evidenceError
     }
 
-    const auditInput = mapEvidenceToAuditInput(deduped)
+    const auditInput = mapEvidenceToAuditInput(deduped, result.complete)
     const audit = await upsertLeadAudit(leadId, auditInput)
     const score = await calculateLeadOpportunityScore(leadId, auditInput)
 
-    status = errors.length > 0 ? "PARTIAL" : "COMPLETED"
+    status = errors.length > 0
+      ? result.pages.length === 0 ? "FAILED" : "PARTIAL"
+      : result.complete ? "COMPLETED" : "PARTIAL"
 
     const { error: updateError } = await supabase
       .from("digital_intelligence_runs")
@@ -836,6 +1187,7 @@ export async function getLatestDigitalIntelligence(leadId: string): Promise<Digi
       sourceUrl: entry.source_url,
       sourceType: entry.source_type,
       confidence: entry.confidence,
+      observationStatus: entry.observation_status ?? (entry.value === null ? "UNKNOWN" : "FOUND"),
       collectedAt: entry.collected_at,
       metadata: entry.metadata ?? {},
     })),

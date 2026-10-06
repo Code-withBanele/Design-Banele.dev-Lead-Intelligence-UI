@@ -8,6 +8,8 @@ import aiRoutes from "./routes/aiRoutes.js"
 
 import auditRoutes from "./routes/auditRoutes.js"
 
+import analyticsRoutes from "./routes/analyticsRoutes.js"
+
 import digitalIntelligenceRoutes from "./routes/digitalIntelligenceRoutes.js"
 
 import leadRoutes from "./routes/leadRoutes.js"
@@ -32,6 +34,8 @@ app.get("/health", (_req, res) => {
 })
 
 app.use("/api/system", systemRoutes)
+
+app.use("/api/analytics", analyticsRoutes)
 
 app.use("/api", auditRoutes)
 

@@ -27,6 +27,7 @@ export type OpportunityScoreResult = {
   score: number
   classification: "LOW" | "MEDIUM" | "HIGH"
   rulesetVersion: string
+  factorWeights: Record<DigitalAuditFactorKey, number>
   calculatedAt: string
   contributingFactors: string[]
 }
@@ -70,6 +71,7 @@ export function calculateOpportunityScore(
     score,
     classification,
     rulesetVersion: OPPORTUNITY_SCORE_RULESET_VERSION,
+    factorWeights: OPPORTUNITY_SCORE_WEIGHTS,
     calculatedAt: now.toISOString(),
     contributingFactors,
   }
@@ -112,6 +114,9 @@ export async function getLatestLeadOpportunityScore(leadId: string) {
     score: data.score,
     classification: data.classification,
     rulesetVersion: data.ruleset_version,
+    factorWeights: data.ruleset_version === OPPORTUNITY_SCORE_RULESET_VERSION
+      ? OPPORTUNITY_SCORE_WEIGHTS
+      : {},
     calculatedAt: data.calculated_at,
     contributingFactors: Array.isArray(data.contributing_factors)
       ? data.contributing_factors
@@ -148,6 +153,7 @@ export async function calculateLeadOpportunityScore(
     score: data.score,
     classification: data.classification,
     rulesetVersion: data.ruleset_version,
+    factorWeights: OPPORTUNITY_SCORE_WEIGHTS,
     calculatedAt: data.calculated_at,
     contributingFactors: Array.isArray(data.contributing_factors)
       ? data.contributing_factors
