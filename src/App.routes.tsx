@@ -17,6 +17,8 @@ import { Badge, Button, EmptyState, Icon, SectionHeader } from "./components/ui"
 
 import { LeadsPage } from "./features/leads"
 
+import { DiscoveryPage } from "./features/discovery/DiscoveryPage"
+
 import { useSessionLeads } from "./features/leads/hooks/useSessionLeads"
 
 import { useServiceHealth } from "./hooks/useServiceHealth"
@@ -479,8 +481,10 @@ function WorkspacePage({
         <Badge>
           {page === "Audits"
             ? "AVAILABLE"
-            : page === "Discovery" || page === "Automation"
+            : page === "Automation"
               ? "NOT CONFIGURED"
+              : page === "Discovery"
+                ? "AVAILABLE"
               : page === "Settings"
                 ? "LOCAL"
               : health && health.status === "healthy"
@@ -770,10 +774,7 @@ function AppContent() {
             element={<Dashboard leads={leads.leads} navigate={navigate} health={systemHealth.health} />}
           />
           <Route path="/leads" element={<LeadsPage />} />
-          <Route
-            path="/discovery"
-            element={<WorkspacePage page="Discovery" health={systemHealth.health} />}
-          />
+          <Route path="/discovery" element={<DiscoveryPage />} />
           <Route path="/audits" element={<WorkspacePage page="Audits" health={systemHealth.health} />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route

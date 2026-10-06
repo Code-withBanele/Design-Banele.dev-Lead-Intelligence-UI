@@ -28,6 +28,8 @@ function mapLead(row: any, business: any) {
 
     name: business?.name ?? "",
 
+    websiteUrl: business?.website_url ?? null,
+
     industry: business?.industry ?? null,
 
     location: business?.location ?? null,
@@ -75,6 +77,7 @@ export async function getLeads() {
         businesses (
           id,
           name,
+          website_url,
           description,
           category,
           industry,
@@ -123,6 +126,7 @@ export async function getLeadById(id: string) {
         businesses (
           id,
           name,
+          website_url,
           description,
           category,
           industry,
@@ -229,6 +233,7 @@ export async function createLeadWithBusiness(input: LeadPayload) {
         businesses (
           id,
           name,
+          website_url,
           description,
           category,
           industry,
@@ -299,6 +304,7 @@ export async function updateLeadStatus(id: string, status: string) {
         businesses (
           id,
           name,
+          website_url,
           description,
           category,
           industry,

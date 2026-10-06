@@ -29,6 +29,8 @@ export type Lead = {
 
   name: string
 
+  websiteUrl: string | null
+
   industry: string | null
 
   location: string | null

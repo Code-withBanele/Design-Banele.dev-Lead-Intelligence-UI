@@ -1,10 +1,15 @@
-import { isIP } from "node:net"
-import { lookup } from "node:dns/promises"
-
 import { supabase } from "../db/supabase.js"
 import { getLeadById } from "./leadService.js"
 import { calculateLeadOpportunityScore } from "./opportunityScoreService.js"
 import { upsertLeadAudit } from "./digitalAuditService.js"
+import { classifySource } from "./discoveryParsing.js"
+import {
+  fetchSafeResource,
+  SAFE_HTTP_CONFIG,
+  validateResolvedSafeUrl,
+  validateSafeUrl,
+  type HostResolver,
+} from "../utils/safeHttp.js"
 
 export const DIGITAL_INTELLIGENCE_COLLECTOR_VERSION = "v1"
 export const BASIC_SEO_SIGNAL_THRESHOLD = 2
@@ -82,135 +87,21 @@ export type DigitalIntelligenceResult = DigitalIntelligenceRun & {
 export const DIGITAL_INTELLIGENCE_CONFIG = {
   maxPagesPerRun: Number(process.env.MAX_PAGES_PER_RUN ?? 15),
   maxDepth: Number(process.env.MAX_CRAWL_DEPTH ?? 2),
-  requestTimeoutMs: Number(process.env.REQUEST_TIMEOUT_MS ?? 10000),
-  maxRedirects: Number(process.env.MAX_REDIRECTS ?? 5),
-  maxResponseSize: Number(process.env.MAX_RESPONSE_SIZE ?? 1200000),
+  requestTimeoutMs: SAFE_HTTP_CONFIG.timeoutMs,
+  maxRedirects: SAFE_HTTP_CONFIG.maxRedirects,
+  maxResponseSize: SAFE_HTTP_CONFIG.maxResponseSize,
   maxRequestsPerRun: Number(process.env.MAX_REQUESTS_PER_RUN ?? 25),
 }
 
-function isPrivateIp(hostname: string): boolean {
-  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase()
-  const family = isIP(host)
-
-  if (family === 4) {
-    const [first, second, third] = host.split(".").map(Number)
-    return (
-      first === 0 ||
-      first === 10 ||
-      first === 127 ||
-      (first === 100 && second >= 64 && second <= 127) ||
-      (first === 169 && second === 254) ||
-      (first === 172 && second >= 16 && second <= 31) ||
-      (first === 192 && second === 168) ||
-      (first === 192 && second === 0 && third === 0) ||
-      (first === 192 && second === 0 && third === 2) ||
-      (first === 198 && (second === 18 || second === 19)) ||
-      (first === 198 && second === 51 && third === 100) ||
-      (first === 203 && second === 0 && third === 113) ||
-      first >= 224
-    )
-  }
-
-  if (family !== 6) return false
-
-  const expanded = expandIpv6(host)
-  if (!expanded) return true
-
-  const groups = expanded.split(":").map((group) => Number.parseInt(group, 16))
-  const mappedIpv4Prefix = groups.slice(0, 5).every((group) => group === 0) && groups[5] === 0xffff
-  if (mappedIpv4Prefix) {
-    const mappedIpv4 = `${groups[6] >> 8}.${groups[6] & 255}.${groups[7] >> 8}.${groups[7] & 255}`
-    return isPrivateIp(mappedIpv4)
-  }
-  const allZeroPrefix = groups.slice(0, 6).every((group) => group === 0)
-  if (allZeroPrefix) {
-    const mappedIpv4 = `${groups[6] >> 8}.${groups[6] & 255}.${groups[7] >> 8}.${groups[7] & 255}`
-    return isPrivateIp(mappedIpv4) || groups[6] === 0 && groups[7] <= 1
-  }
-
-  return (groups[0] & 0xfe00) === 0xfc00 || (groups[0] & 0xffc0) === 0xfe80 || (groups[0] & 0xffc0) === 0xfec0
-}
-
-function expandIpv6(host: string): string | null {
-  if (host.includes("%")) return null
-  const halves = host.split("::")
-  if (halves.length > 2) return null
-  const parseHalf = (half: string) => half ? half.split(":") : []
-  const left = parseHalf(halves[0])
-  const right = parseHalf(halves[1] ?? "")
-  const missing = 8 - left.length - right.length
-  if ((halves.length === 1 && missing !== 0) || (halves.length === 2 && missing < 1)) return null
-  const groups = [...left, ...Array(missing).fill("0"), ...right]
-  if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{1,4}$/i.test(group))) return null
-  return groups.map((group) => Number.parseInt(group, 16).toString(16).padStart(4, "0")).join(":")
-}
-
-function isBlockedHostname(hostname: string): boolean {
-  const host = hostname.toLowerCase().trim().replace(/\.$/, "")
-
-  if (!host) return true
-  if (host === "localhost" || host.endsWith(".localhost")) return true
-  if (host === "localhost.localdomain") return true
-  if (host.endsWith(".localdomain") || host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".lan") || host.endsWith(".home.arpa")) return true
-
-  return isPrivateIp(host)
-}
-
 export function validateWebsiteUrl(rawUrl: string): string {
-  const value = (rawUrl ?? "").trim()
-
-  if (!value) {
-    throw new Error("A website URL is required for digital intelligence collection.")
-  }
-
-  let url: URL
-
-  try {
-    url = new URL(value)
-  } catch {
-    throw new Error("The website URL is invalid.")
-  }
-
-  if (!["http:", "https:"].includes(url.protocol)) {
-    throw new Error("Only http and https URLs are supported for digital intelligence collection.")
-  }
-
-  const hostname = url.hostname.toLowerCase()
-
-  if (isBlockedHostname(hostname)) {
-    throw new Error("The website URL resolves to a blocked internal or local address.")
-  }
-
-  return url.toString().replace(/\/$/, "")
-}
-
-type HostResolver = (hostname: string) => Promise<Array<{ address: string }>>
-
-async function resolveHostname(hostname: string) {
-  return lookup(hostname, { all: true, verbatim: true })
+  return validateSafeUrl(rawUrl)
 }
 
 export async function validateResolvedWebsiteUrl(
   rawUrl: string,
-  resolver: HostResolver = resolveHostname,
+  resolver?: HostResolver,
 ): Promise<string> {
-  const validatedUrl = validateWebsiteUrl(rawUrl)
-  const hostname = new URL(validatedUrl).hostname.replace(/^\[|\]$/g, "")
-
-  if (isIP(hostname)) return validatedUrl
-
-  let addresses: Array<{ address: string }>
-  try {
-    addresses = await resolver(hostname)
-  } catch {
-    throw new Error("The website hostname could not be safely resolved.")
-  }
-
-  if (!addresses.length || addresses.some(({ address }) => isPrivateIp(address))) {
-    throw new Error("The website hostname resolves to a blocked local or private network address.")
-  }
-
-  return validatedUrl
+  return validateResolvedSafeUrl(rawUrl, resolver)
 }
 
 async function fetchWithTimeout(
@@ -218,88 +109,22 @@ async function fetchWithTimeout(
   timeoutMs: number,
   maxRedirects: number,
   requestBudget: { count: number; limit: number },
-  resolver: HostResolver,
+  resolver?: HostResolver,
 ) {
-  let currentUrl = await validateResolvedWebsiteUrl(url, resolver)
-  const history: string[] = []
-
-  for (let redirectRound = 0; redirectRound <= maxRedirects; redirectRound += 1) {
-    if (requestBudget.count >= requestBudget.limit) {
-      throw new Error("The collection request limit was reached.")
-    }
-    requestBudget.count += 1
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-
-    try {
-      const response = await fetch(currentUrl, {
-        method: "GET",
-        redirect: "manual",
-        signal: controller.signal,
-        headers: {
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "User-Agent": "Banele.dev Digital Intelligence Collector/1.0",
-        },
-      })
-
-      const location = response.headers.get("location")
-      const isRedirect = response.status >= 300 && response.status < 400
-
-      if (isRedirect && location) {
-        history.push(currentUrl)
-        const nextTarget = new URL(location, currentUrl)
-        const nextUrl = await validateResolvedWebsiteUrl(nextTarget.toString(), resolver)
-        currentUrl = nextUrl
-        continue
-      }
-
-      let contents = ""
-      if (response.body) {
-        const reader = response.body.getReader()
-        const chunks: Uint8Array[] = []
-        let size = 0
-        let streamEnded = false
-        while (size < DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize) {
-          const { done, value } = await reader.read()
-          if (done) {
-            streamEnded = true
-            break
-          }
-          const chunk = value.subarray(0, DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize - size)
-          chunks.push(chunk)
-          size += chunk.byteLength
-          if (chunk.byteLength !== value.byteLength) {
-            await reader.cancel()
-            streamEnded = true
-            break
-          }
-        }
-        if (!streamEnded) await reader.cancel()
-        contents = Buffer.concat(chunks).toString("utf8")
-      } else {
-        contents = (await response.text()).slice(0, DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize)
-      }
-
-      return {
-        status: response.status,
-        ok: response.ok,
-        finalUrl: currentUrl,
-        history,
-        contentType: response.headers.get("content-type") ?? "",
-        body: contents.slice(0, DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize),
-      }
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        throw new Error(`Request timed out for ${currentUrl}.`)
-      }
-
-      throw error
-    } finally {
-      clearTimeout(timer)
-    }
+  const response = await fetchSafeResource(
+    url,
+    {
+      timeoutMs,
+      maxRedirects,
+      maxResponseSize: DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize,
+    },
+    requestBudget,
+    resolver,
+  )
+  return {
+    ...response,
+    body: response.body.slice(0, DIGITAL_INTELLIGENCE_CONFIG.maxResponseSize),
   }
-
-  throw new Error(`Too many redirects while loading ${url}.`)
 }
 
 function extractLinksFromHtml(html: string): string[] {
@@ -684,10 +509,10 @@ export function extractEvidenceFromHtml(
 }
 
 export async function crawlWebsite(url: string) {
-  return crawlWebsiteWithResolver(url, resolveHostname)
+  return crawlWebsiteWithResolver(url)
 }
 
-export async function crawlWebsiteWithResolver(url: string, resolver: HostResolver) {
+export async function crawlWebsiteWithResolver(url: string, resolver?: HostResolver) {
   const seededUrl = await validateResolvedWebsiteUrl(url, resolver)
   const pageQueue = [{ url: seededUrl, depth: 0 }]
   const visitedUrls = new Set<string>()
@@ -728,6 +553,26 @@ export async function crawlWebsiteWithResolver(url: string, resolver: HostResolv
       if (!response.contentType.toLowerCase().includes("html")) {
         warnings.push(`Page ${normalized} did not return HTML; page evidence remains unknown.`)
         incomplete = true
+      }
+
+      if (
+        pages.length === 1 &&
+        response.ok &&
+        response.contentType.toLowerCase().includes("html")
+      ) {
+        const sourceClassification = classifySource({ url: response.finalUrl, html: response.body })
+        if (sourceClassification.sourceType === "DIRECTORY" || sourceClassification.sourceType === "LISTING_PAGE") {
+          warnings.push("This is a directory/listing source, not a single business website. Use Business Discovery instead.")
+          incomplete = true
+          return {
+            pages,
+            warnings,
+            errors,
+            requestsMade: requestBudget.count,
+            complete: false,
+            evidence: [] as DigitalEvidence[],
+          }
+        }
       }
 
       if (current.depth >= DIGITAL_INTELLIGENCE_CONFIG.maxDepth) continue
@@ -985,6 +830,19 @@ export async function collectDigitalIntelligence(leadId: string, request: Digita
     warnings = result.warnings
     errors = result.errors
 
+    const firstSuccessfulHtmlPage = result.pages.find((page) =>
+      page.status >= 200 && page.status < 300 && page.contentType.toLowerCase().includes("html"),
+    )
+    if (firstSuccessfulHtmlPage) {
+      const classification = classifySource({ url: firstSuccessfulHtmlPage.url, html: firstSuccessfulHtmlPage.body })
+      if (classification.sourceType === "DIRECTORY" || classification.sourceType === "LISTING_PAGE") {
+        throw Object.assign(
+          new Error("This URL is a directory/listing source, not this business’s website. Use Business Discovery for multi-business sources."),
+          { statusCode: 409, code: "DIRECTORY_SOURCE_REQUIRES_DISCOVERY" },
+        )
+      }
+    }
+
     const evidence: DigitalEvidence[] = [...result.evidence]
 
     for (const page of result.pages) {
@@ -1131,9 +989,10 @@ export async function collectDigitalIntelligence(leadId: string, request: Digita
       console.error(updateError)
     }
 
+    const sourceError = error as Error & { statusCode?: number; code?: string }
     const serviceError = new Error(message) as Error & { statusCode?: number; code?: string }
-    serviceError.statusCode = 500
-    serviceError.code = "DIGITAL_INTELLIGENCE_FAILED"
+    serviceError.statusCode = sourceError.statusCode ?? 500
+    serviceError.code = sourceError.code ?? "DIGITAL_INTELLIGENCE_FAILED"
     throw serviceError
   }
 }

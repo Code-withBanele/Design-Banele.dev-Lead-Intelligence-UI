@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router-dom"
 
 import { Badge, Button, EmptyState, Icon } from "@/components/ui"
 
@@ -45,6 +46,7 @@ function formatAuditFactor(key: string) {
 }
 
 export function LeadPage() {
+  const navigate = useNavigate()
   const sessionLeads = useSessionLeads()
 
   const [view, setView] = useState<"table" | "kanban">("table")
@@ -94,7 +96,8 @@ export function LeadPage() {
       return
     }
 
-    setWebsiteUrl((current) => current || "https://")
+    const selectedLead = visibleLeads[0]
+    setWebsiteUrl(selectedLead?.websiteUrl || "https://")
     setQualificationError(null)
 
     void (async () => {
@@ -308,6 +311,13 @@ export function LeadPage() {
               <p className="eyebrow">DIGITAL INTELLIGENCE</p>
               <h2 className="text-xl font-semibold text-white">Evidence collector</h2>
             </div>
+            <button
+              type="button"
+              className="rounded border border-[#303030] bg-[#111111] px-3 py-2 text-xs font-medium text-white"
+              onClick={() => navigate("/discovery")}
+            >
+              Use directory or listing source
+            </button>
             {digitalIntelligence && (
               <div className="rounded border border-[#303030] bg-[#111111] p-3 text-left">
                 <div className="text-[10px] uppercase tracking-[0.18em] text-[#a5a5a5]">
@@ -322,18 +332,18 @@ export function LeadPage() {
           <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center">
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <label className="text-xs text-[#a5a5a5]" htmlFor="known-website-source">
-                Known website / manual source
+                Known business website
               </label>
               <input
                 id="known-website-source"
-                aria-label="Known website or manual source URL"
+                aria-label="Known business website URL"
                 className="w-full rounded border border-[#303030] bg-[#101010] px-3 py-2 text-sm text-white placeholder:text-[#6b7280]"
                 placeholder="https://example.com"
                 value={websiteUrl}
                 onChange={(event) => setWebsiteUrl(event.target.value)}
               />
               <span className="text-xs text-[#a5a5a5]">
-                The supplied URL is the collector source; it is not automatically discovered.
+                This URL is checked as this business’s website. Directory and listing URLs belong in Discovery.
               </span>
             </div>
             <button

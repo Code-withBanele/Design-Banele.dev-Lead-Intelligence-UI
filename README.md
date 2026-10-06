@@ -30,8 +30,9 @@ The frontend communicates only with the local Node API. The Supabase service-rol
 - Bounded digital intelligence collection with evidence states and verified robots.txt/sitemap checks
 - Deterministic lead qualification based on score, audit coverage, and evidence sufficiency
 - Server-calculated analytics derived from persisted lead lifecycle, contact, audit, and score data
+- Manually initiated, bounded directory/source discovery with business-level provenance and idempotent identity matching
 
-The application does not implement automated discovery, outbound messaging, n8n execution, authentication, or CRM integrations. Notification delivery is not connected to an event store.
+Discovery classifies and extracts business records but does not automatically run their audits. Digital Intelligence remains an individual-business operation. The application does not implement autonomous discovery, outbound messaging, n8n execution, authentication, or CRM integrations. Notification delivery is not connected to an event store.
 
 ## Technology
 
@@ -105,7 +106,7 @@ It creates:
 
 The existing migration is the source of truth. Do not rewrite completed migration history; create another migration for schema changes.
 
-Apply migrations in numeric order before using the corresponding features. Migration `007_lead_qualification.sql` creates or upgrades qualification snapshots. Migration `008_digital_evidence_observation_status.sql` adds explicit `FOUND`, `NOT_FOUND`, `UNKNOWN`, and `FAILED` evidence states. Builds do not apply migrations to Supabase.
+Apply migrations in numeric order before using the corresponding features. Migration `007_lead_qualification.sql` creates or upgrades qualification snapshots. Migration `008_digital_evidence_observation_status.sql` adds explicit `FOUND`, `NOT_FOUND`, `UNKNOWN`, and `FAILED` evidence states. Migration `009_business_discovery.sql` adds known business website and normalized identity fields, bounded discovery runs, and source provenance links. Builds do not apply migrations to Supabase.
 
 The hardened migration declares `opportunity_score` with a default of `NULL`, and `0` remains a valid calculated score when a score has been computed. The repository tracks this as a schema change in `supabase/migrations/002_harden_lead_creation.sql`, and it must be applied to the live Supabase project before the transactional lead-creation flow is considered production-ready.
 
@@ -119,7 +120,11 @@ GET    /api/leads/:id
 POST   /api/leads
 PATCH  /api/leads/:id
 GET    /api/analytics
+POST   /api/discovery
+GET    /api/discovery/:runId
 ```
+
+Discovery runs are separate from Digital Intelligence runs. They accept one manual source URL, classify it deterministically, respect same-origin pagination and robots.txt rules, and return per-business creation/update outcomes without triggering audit, scoring, AI, qualification, or outreach.
 
 `GET /api/analytics` derives conversion rate from current `WON` lead stages, meetings from current `MEETING` stages, recorded outreach from non-null `first_contacted_at`, and reply rate from `REPLIED` leads divided by leads with recorded first contact. Rates/counts are `null` when the source dataset is absent; a calculated zero remains `0`. No outbound message/activity records exist, so the contact count is not a sent-message count.
 

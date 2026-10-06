@@ -76,6 +76,29 @@ test("public redirects are allowed and redirect limits are enforced", async () =
   }
 })
 
+test("individual Digital Intelligence refuses a directory root without business evidence", async () => {
+  const originalFetch = globalThis.fetch
+  let calls = 0
+  globalThis.fetch = async () => {
+    calls += 1
+    return new Response(
+      '<script type="application/ld+json">{"@type":"ItemList","itemListElement":[{"name":"ABC"},{"name":"XYZ"}]}</script><a href="/business/abc">ABC profile</a><a href="/business/xyz">XYZ profile</a>',
+      { status: 200, headers: { "content-type": "text/html" } },
+    )
+  }
+
+  try {
+    const result = await crawlWebsiteWithResolver("https://directory.example/businesses", async () => [{ address: "93.184.216.34" }])
+    assert.equal(calls, 1)
+    assert.equal(result.pages.length, 1)
+    assert.equal(result.evidence.length, 0)
+    assert.equal(result.complete, false)
+    assert.ok(result.warnings.some((warning) => /Business Discovery/i.test(warning)))
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 test("page, redirect, and resource requests share one configured request budget", async () => {
   const originalFetch = globalThis.fetch
   const previousLimit = DIGITAL_INTELLIGENCE_CONFIG.maxRequestsPerRun
