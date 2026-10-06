@@ -35,15 +35,27 @@ app.use(
       error?.code ??
       (statusCode === 404 ? "LEAD_NOT_FOUND" : "INTERNAL_SERVER_ERROR")
 
-    res.status(statusCode).json({
+    const response: {
+      error: {
+        code: string
+
+        message: string
+
+        details?: string
+      }
+    } = {
       error: {
         code,
 
         message,
       },
+    }
 
-      ...(process.env.NODE_ENV === "development" && { stack: error?.stack }),
-    })
+    if (statusCode >= 500 && process.env.NODE_ENV !== "production") {
+      response.error.details = "An unexpected server error occurred."
+    }
+
+    res.status(statusCode).json(response)
   },
 )
 

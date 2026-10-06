@@ -39,7 +39,7 @@ The API does not implement discovery, scoring, AI, outreach, automation, authent
 
 ## Local development
 
-Install the dependencies:
+Install the frontend dependencies:
 
 ```bash
 pnpm install
@@ -51,12 +51,12 @@ Start the frontend:
 pnpm dev
 ```
 
-Start the backend from the `server` directory:
+Install the backend dependencies from the `server` directory:
 
 ```bash
 cd server
-pnpm install
-pnpm dev
+npm install
+npm run dev
 ```
 
 The API listens on `http://localhost:4000` and serves `/api/leads`.
