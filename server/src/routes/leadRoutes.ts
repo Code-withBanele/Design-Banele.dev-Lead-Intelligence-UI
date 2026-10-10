@@ -11,10 +11,39 @@ import {
   evaluateLeadQualification,
   getLatestLeadQualification,
 } from "../services/leadQualificationService.js"
+import {
+  enqueueLeadPipeline,
+  enqueueUnprocessedLeads,
+  getLeadPipelineStatus,
+} from "../services/leadPipelineService.js"
 
 import { isLeadStatus } from "../utils/leadValidation.js"
 
 const router = Router()
+
+router.get("/:id/pipeline", async (req, res, next) => {
+  try {
+    res.json(await getLeadPipelineStatus(req.params.id))
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post("/pipeline/run-unprocessed", async (_req, res, next) => {
+  try {
+    res.status(202).json(await enqueueUnprocessedLeads())
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.post("/:id/pipeline/rerun", async (req, res, next) => {
+  try {
+    res.status(202).json(await enqueueLeadPipeline(req.params.id, true))
+  } catch (error) {
+    next(error)
+  }
+})
 
 router.get("/", async (_req, res, next) => {
   try {

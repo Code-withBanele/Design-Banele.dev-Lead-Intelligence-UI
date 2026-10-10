@@ -159,6 +159,33 @@ export async function upsertLeadAudit(
 ): Promise<DigitalAuditRecord> {
   const normalized = normalizeAuditFactors(input)
 
+  const { data: latest, error: latestError } = await supabase
+    .from("lead_digital_audits")
+    .select("*")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (latestError) throw latestError
+  const latestFactors = Array.isArray(latest?.factors) ? latest.factors as DigitalAuditFactor[] : []
+  const factorsMatch = latestFactors.length === normalized.length && normalized.every((factor, index) => {
+    const stored = latestFactors[index]
+    return stored.key === factor.key &&
+      stored.value === factor.value &&
+      stored.status === factor.status &&
+      (stored.evidence ?? undefined) === (factor.evidence ?? undefined)
+  })
+  if (latest && factorsMatch) {
+    return {
+      id: latest.id,
+      leadId: latest.lead_id,
+      auditVersion: latest.audit_version,
+      createdAt: latest.created_at,
+      factors: Array.isArray(latest.factors) ? latest.factors : normalized,
+    }
+  }
+
   const { data, error } = await supabase
     .from("lead_digital_audits")
     .insert({

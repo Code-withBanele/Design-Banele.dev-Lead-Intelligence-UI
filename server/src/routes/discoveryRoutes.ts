@@ -1,6 +1,7 @@
 import { Router } from "express"
 
 import { getDiscoveryRun, runDiscovery } from "../services/discoveryService.js"
+import { enqueueDiscoveredLeads } from "../services/leadPipelineService.js"
 import { validateSafeUrl } from "../utils/safeHttp.js"
 
 const router = Router()
@@ -29,6 +30,8 @@ router.post("/", async (req, res, next) => {
     }
 
     const result = await runDiscovery(validatedSourceUrl)
+  const leadIds = result.businesses.flatMap((business) => business.leadId ? [business.leadId] : [])
+  await enqueueDiscoveredLeads(leadIds)
     res.status(201).json(result)
   } catch (error) {
     next(error)

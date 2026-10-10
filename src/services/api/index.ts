@@ -2,6 +2,8 @@ export { apiClient, fetchJson } from "./client"
 
 export { getAnalytics } from "./analytics"
 
+export { getLeadPipelineStatus, rerunLeadPipeline, runUnprocessedPipelines } from "./pipeline"
+
 export { getDiscoveryRun, runDiscovery } from "./discovery"
 
 export {

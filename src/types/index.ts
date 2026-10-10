@@ -6,6 +6,8 @@ export type { DiscoveredBusinessResult, DiscoveryRunResult, DiscoverySourceType 
 
 export * from "./audit"
 
+export * from "./pipeline"
+
 export * from "./system"
 
 export type { CreateLeadInput, Lead, LeadStatus, UpdateLeadInput } from "./lead"

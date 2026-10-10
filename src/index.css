@@ -227,6 +227,17 @@ button.table-row { width: 100%; border-top: 0; border-left: 0; border-right: 0; 
   .settings-layout { grid-template-columns: 1fr; }.settings-nav { grid-template-columns: repeat(3, auto); overflow-x: auto; }.settings-nav button { white-space: nowrap; }.settings-nav button svg { display: none; }.settings-form { grid-template-columns: 1fr; }.connection-card { flex-wrap: wrap; }.connection-card .button { width: 100%; }.toast { left: 14px; right: 14px; bottom: 14px; width: auto; }
 }
 
+@media (max-width: 640px) {
+  .lead-table .table-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .lead-table .table-row > :nth-child(2) { display: none; }
+  .lead-table .table-row > :nth-child(3) { grid-column: 1 / -1; grid-row: 2; display: flex; flex-direction: column; align-items: flex-start; }
+  .lead-table .table-row > :nth-child(4) { grid-column: 2; grid-row: 1; position: static; text-align: right; }
+  .lead-table .table-row > :nth-child(5) { grid-column: 1; grid-row: 3; display: flex; }
+  .lead-table .table-row > :nth-child(6) { grid-column: 2; grid-row: 3; position: static; width: 100%; }
+  .lead-table .table-row > :nth-child(7) { grid-column: 1 / -1; grid-row: 4; display: flex; overflow-wrap: anywhere; }
+  .lead-table .table-row > :nth-child(8) { grid-column: 1 / -1; grid-row: 5; }
+}
+
 /* Black and red intelligence theme */
 .topbar { background: rgba(9, 9, 9, .94); }
 .sidebar { border-right: 0; }

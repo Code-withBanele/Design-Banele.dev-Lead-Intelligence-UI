@@ -10,7 +10,9 @@ import {
   getDigitalIntelligence,
   getLeadAudit,
   getLeadQualification,
+  getLeadPipelineStatus,
   getOpportunityScore,
+  rerunLeadPipeline,
 } from "@/services/api"
 
 import {
@@ -21,6 +23,7 @@ import {
   type DigitalIntelligenceRun,
   type LeadQualificationResult,
   type OpportunityScoreResult,
+  type LeadPipelineStatus,
 } from "@/types"
 
 import { useSessionLeads } from "../hooks/useSessionLeads"
@@ -70,6 +73,14 @@ export function LeadPage() {
 
   const [qualificationError, setQualificationError] = useState<string | null>(null)
 
+  const [pipelineByLead, setPipelineByLead] = useState<Record<string, LeadPipelineStatus>>({})
+
+  const [pipelineLoadErrors, setPipelineLoadErrors] = useState<Record<string, string>>({})
+
+  const [retryingPipelineFor, setRetryingPipelineFor] = useState<string | null>(null)
+
+  const [pipelineActionError, setPipelineActionError] = useState<string | null>(null)
+
   const [websiteUrl, setWebsiteUrl] = useState("")
 
   const [collectingDigital, setCollectingDigital] = useState(false)
@@ -84,6 +95,46 @@ export function LeadPage() {
   } = sessionLeads
 
   const selectedLeadId = visibleLeads[0]?.id
+  const visibleLeadIds = visibleLeads.map((lead) => lead.id).join(",")
+
+  useEffect(() => {
+    const leadIds = visibleLeadIds ? visibleLeadIds.split(",") : []
+    if (!leadIds.length) {
+      setPipelineByLead({})
+      return
+    }
+
+    let disposed = false
+    let refreshing = false
+    const refresh = async () => {
+      if (refreshing) return
+      refreshing = true
+      const results = await Promise.all(leadIds.map(async (leadId) => {
+        try {
+          return [leadId, await getLeadPipelineStatus(leadId), null] as const
+        } catch (error) {
+          return [leadId, null, error instanceof Error ? error.message : "Unable to load pipeline status."] as const
+        }
+      }))
+      if (!disposed) {
+        setPipelineByLead((current) => Object.fromEntries(results.flatMap(([leadId, status]) => {
+          const nextStatus = status ?? current[leadId]
+          return nextStatus ? [[leadId, nextStatus]] : []
+        })))
+        setPipelineLoadErrors(Object.fromEntries(results.flatMap(([leadId, status, message]) =>
+          !status && message ? [[leadId, message]] : [],
+        )))
+      }
+      refreshing = false
+    }
+
+    void refresh()
+    const intervalId = window.setInterval(() => void refresh(), 4000)
+    return () => {
+      disposed = true
+      window.clearInterval(intervalId)
+    }
+  }, [visibleLeadIds])
 
   useEffect(() => {
     if (!selectedLeadId) {
@@ -150,6 +201,11 @@ export function LeadPage() {
       {sessionLeads.error && (
         <div className="mb-4 rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
           {sessionLeads.error}
+        </div>
+      )}
+      {pipelineActionError && (
+        <div className="mb-4 rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+          {pipelineActionError}
         </div>
       )}
       {adding && (
@@ -268,7 +324,7 @@ export function LeadPage() {
           {qualification ? (
             <div className="space-y-3 text-sm text-[#d4d4d4]">
               <div className="flex flex-wrap gap-x-5 gap-y-1">
-                <span>Status: <strong className="text-white">{qualification.status.replaceAll("_", " ")}</strong></span>
+                <span>Status: <strong className="text-white">{qualification.status.replace(/_/g, " ")}</strong></span>
                 <span>Evidence: <strong className="text-white">{qualification.evidenceSufficiency}</strong></span>
                 <span>Opportunity: <strong className="text-white">{qualification.opportunityScore} / {qualification.classification}</strong></span>
               </div>
@@ -535,15 +591,38 @@ export function LeadPage() {
             <div className="table-row table-head">
               <span>BUSINESS</span>
               <span>INDUSTRY / LOCATION</span>
-              <span>DIGITAL PRESENCE</span>
-              <span>SCORE</span>
-              <span>PRIORITY</span>
+              <span>PIPELINE</span>
+              <span>SCORE / CLASS</span>
+              <span>QUALIFICATION</span>
               <span>STATUS</span>
-              <span>LAST ACTIVITY</span>
+              <span>AI ANALYSIS</span>
               <span>NEXT ACTION</span>
             </div>
             {visibleLeads.map((lead) => (
               <div className="table-row" key={lead.id}>
+                {(() => {
+                  const pipeline = pipelineByLead[lead.id]
+                  const failedStage = pipeline && Object.values(pipeline.stages).find((stage) => stage.status === "FAILED")
+                  const skippedStage = pipeline && Object.values(pipeline.stages).find((stage) => stage.status === "SKIPPED" && stage.errorMessage)
+                  const reasonStage = failedStage ?? skippedStage
+                  const activeStage = pipeline && Object.values(pipeline.stages).find((stage) => stage.status === "RUNNING")
+                  const pendingStage = pipeline && Object.values(pipeline.stages).find((stage) => stage.status === "PENDING")
+                  const allSkipped = pipeline && Object.values(pipeline.stages).every((stage) => stage.status === "SKIPPED")
+                  const pipelineLabel = failedStage
+                    ? `${failedStage.stage} FAILED`
+                    : activeStage
+                      ? `${activeStage.stage} RUNNING`
+                      : pendingStage
+                        ? `${pendingStage.stage} PENDING`
+                        : allSkipped
+                          ? "NEEDS REVIEW"
+                          : pipeline
+                            ? "COMPLETE"
+                            : pipelineLoadErrors[lead.id]
+                              ? "Unavailable"
+                              : "Loading…"
+                  return (
+                    <>
                 <span className="table-business">
                   <span className="business-avatar">
                     {lead.name.slice(0, 2).toUpperCase()}
@@ -554,9 +633,18 @@ export function LeadPage() {
                   <strong>{lead.industry || "Not provided"}</strong>
                   <small>{lead.location || "Not provided"}</small>
                 </span>
-                <span>Not audited</span>
-                <span>—</span>
-                <span>Not scored</span>
+                <span title={reasonStage?.errorMessage ?? undefined}>
+                  {pipelineLabel}
+                  {pipeline && <small>{Object.values(pipeline.stages).map((stage) => `${stage.stage}: ${stage.status}`).join(" · ")}</small>}
+                  {reasonStage?.errorMessage && <small className={failedStage ? "text-red-200" : "text-amber-200"}>{reasonStage.errorMessage}</small>}
+                  {!pipeline && pipelineLoadErrors[lead.id] && <small>{pipelineLoadErrors[lead.id]}</small>}
+                </span>
+                <span>
+                  {pipeline?.opportunityScore
+                    ? <><strong>{pipeline.opportunityScore.score}</strong><small>{pipeline.opportunityScore.classification}</small></>
+                    : "No score"}
+                </span>
+                <span>{pipeline?.qualification?.status.replace(/_/g, " ") ?? "Not evaluated"}</span>
                 <label className="sr-only" htmlFor={`status-${lead.id}`}>
                   Change lead status
                 </label>
@@ -577,8 +665,35 @@ export function LeadPage() {
                     </option>
                   ))}
                 </select>
-                <span>—</span>
-                <span>Awaiting audit</span>
+                <span title={pipeline?.aiAnalysis?.analysis.summary ?? undefined}>
+                  {pipeline?.aiAnalysis?.analysis.summary ?? "No analysis"}
+                </span>
+                <span>
+                  {failedStage ? (
+                    <button
+                      type="button"
+                      className="rounded border border-amber-500/50 px-2 py-1 text-xs text-amber-200 disabled:opacity-50"
+                      disabled={retryingPipelineFor === lead.id}
+                      title={failedStage.errorMessage ?? "Retry pipeline"}
+                      onClick={async () => {
+                        try {
+                          setRetryingPipelineFor(lead.id)
+                          setPipelineActionError(null)
+                          await rerunLeadPipeline(lead.id)
+                        } catch (error) {
+                          setPipelineActionError(error instanceof Error ? error.message : "Unable to retry pipeline.")
+                        } finally {
+                          setRetryingPipelineFor(null)
+                        }
+                      }}
+                    >
+                      {retryingPipelineFor === lead.id ? "Queued…" : "Retry"}
+                    </button>
+                  ) : pendingStage || activeStage ? "Processing" : allSkipped ? "Needs review" : "—"}
+                </span>
+                    </>
+                  )
+                })()}
               </div>
             ))}
           </div>

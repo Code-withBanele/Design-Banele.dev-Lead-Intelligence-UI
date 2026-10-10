@@ -131,6 +131,29 @@ export async function calculateLeadOpportunityScore(
   const audit = await upsertLeadAudit(leadId, input)
   const result = calculateOpportunityScore(audit.factors)
 
+  const { data: existingScore, error: existingScoreError } = await supabase
+    .from("lead_opportunity_scores")
+    .select("*")
+    .eq("audit_id", audit.id)
+    .eq("ruleset_version", result.rulesetVersion)
+    .order("calculated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existingScoreError) throw existingScoreError
+  if (existingScore) {
+    return {
+      score: existingScore.score,
+      classification: existingScore.classification,
+      rulesetVersion: existingScore.ruleset_version,
+      factorWeights: OPPORTUNITY_SCORE_WEIGHTS,
+      calculatedAt: existingScore.calculated_at,
+      contributingFactors: Array.isArray(existingScore.contributing_factors)
+        ? existingScore.contributing_factors
+        : result.contributingFactors,
+    }
+  }
+
   const { data, error } = await supabase
     .from("lead_opportunity_scores")
     .insert({
