@@ -17,6 +17,8 @@ export type LeadPayload = {
 
   location?: string
 
+  websiteUrl?: string
+
   status?: string
 }
 
@@ -174,6 +176,8 @@ export async function createLeadWithBusiness(input: LeadPayload) {
 
     location: input.location,
 
+    websiteUrl: input.websiteUrl,
+
     status: input.status as any,
   })
 
@@ -183,6 +187,7 @@ export async function createLeadWithBusiness(input: LeadPayload) {
       name: normalized.name,
       industry: normalized.industry || null,
       location: normalized.location || null,
+      website_url: normalized.websiteUrl || null,
       status: "active",
     })
     .select("id, name, industry, location")

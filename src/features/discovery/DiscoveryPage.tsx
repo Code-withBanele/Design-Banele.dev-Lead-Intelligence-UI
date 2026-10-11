@@ -73,7 +73,9 @@ export function DiscoveryPage() {
             setResult(null)
             setRunning(true)
             try {
-              setResult(await runDiscovery(sourceUrl))
+              const normalized = sourceUrl.trim()
+              const submittedUrl = /^https?:\/\//i.test(normalized) ? normalized : `https://${normalized}`
+              setResult(await runDiscovery(submittedUrl))
             } catch (requestError) {
               setError(requestError instanceof Error ? requestError.message : "Discovery request failed.")
             } finally {

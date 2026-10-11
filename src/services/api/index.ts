@@ -19,6 +19,6 @@ export {
   getOpportunityScore,
 } from "./audit"
 
-export { createLead, getLead, getLeads, updateLead } from "./leads"
+export { createLead, getLead, getLeadShortlist, getLeads, updateLead } from "./leads"
 
 export { getSystemHealth } from "./system"

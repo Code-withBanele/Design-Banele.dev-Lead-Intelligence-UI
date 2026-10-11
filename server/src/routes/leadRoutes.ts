@@ -16,6 +16,10 @@ import {
   enqueueUnprocessedLeads,
   getLeadPipelineStatus,
 } from "../services/leadPipelineService.js"
+import {
+  getLeadShortlist,
+  getLeadShortlistEntry,
+} from "../services/leadShortlistService.js"
 
 import { isLeadStatus } from "../utils/leadValidation.js"
 
@@ -40,6 +44,23 @@ router.post("/pipeline/run-unprocessed", async (_req, res, next) => {
 router.post("/:id/pipeline/rerun", async (req, res, next) => {
   try {
     res.status(202).json(await enqueueLeadPipeline(req.params.id, true))
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get("/shortlist", async (_req, res, next) => {
+  try {
+    res.json(await getLeadShortlist())
+  } catch (error) {
+    next(error)
+  }
+})
+
+router.get("/:id/shortlist", async (req, res, next) => {
+  try {
+    await getLeadById(req.params.id)
+    res.json(await getLeadShortlistEntry(req.params.id))
   } catch (error) {
     next(error)
   }
@@ -89,7 +110,7 @@ router.post("/:id/qualification", async (req, res, next) => {
 
 router.post("/", async (req, res, next) => {
   try {
-    const { name, industry, location, status } = req.body ?? {}
+    const { name, industry, location, websiteUrl, status } = req.body ?? {}
 
     if (!name || typeof name !== "string") {
       res.status(400).json({ message: "Business name is required." })
@@ -110,8 +131,14 @@ router.post("/", async (req, res, next) => {
 
       location,
 
+      websiteUrl: typeof websiteUrl === "string" ? websiteUrl : undefined,
+
       status,
     })
+
+    if (typeof websiteUrl === "string" && websiteUrl.trim()) {
+      await enqueueLeadPipeline(lead.id, false)
+    }
 
     res.status(201).json(lead)
   } catch (error) {

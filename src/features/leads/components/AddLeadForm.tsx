@@ -17,11 +17,13 @@ export function AddLeadForm({
 
   const [location, setLocation] = useState("")
 
+  const [websiteUrl, setWebsiteUrl] = useState("")
+
   return (
     <section className="panel mb-5 p-5">
       <SectionHeader
         title="Add a business"
-        meta="No audit, score, or AI analysis is inferred from these details."
+        meta="A valid website URL will trigger a digital audit as soon as the lead is created."
       />
       <form
         className="grid gap-4 p-4 md:grid-cols-3"
@@ -36,6 +38,7 @@ export function AddLeadForm({
             name: trimmedName,
             industry: industry.trim(),
             location: location.trim(),
+            websiteUrl: websiteUrl.trim() || undefined,
             status: "NEW",
           })
 
@@ -44,6 +47,8 @@ export function AddLeadForm({
           setIndustry("")
 
           setLocation("")
+
+          setWebsiteUrl("")
 
           onCancel()
         }}
@@ -67,6 +72,12 @@ export function AddLeadForm({
             label: "Location",
             value: location,
             setValue: setLocation,
+          },
+          {
+            key: "websiteUrl",
+            label: "Website URL",
+            value: websiteUrl,
+            setValue: setWebsiteUrl,
           },
         ].map(({ key, label, value, setValue, required }) => (
           <label className="grid gap-2 text-xs" key={key}>

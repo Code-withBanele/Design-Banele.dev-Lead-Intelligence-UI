@@ -72,9 +72,28 @@ function isBlockedHostname(hostname: string): boolean {
   return isPrivateIp(host)
 }
 
-export function validateSafeUrl(rawUrl: string): string {
+export function normalizeSourceUrl(rawUrl: string): string {
   const value = (rawUrl ?? "").trim()
-  if (!value) throw new Error("A source URL is required.")
+  if (!value) return value
+
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
+    return value
+  }
+
+  if (/^\//.test(value)) {
+    return value
+  }
+
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(?:[/?#]|$)/i.test(value) || /^[^\s/]+\.[^\s/]+(?:[/?#]|$)/i.test(value)) {
+    return `https://${value}`
+  }
+
+  return value
+}
+
+export function validateSafeUrl(rawUrl: string): string {
+  const value = normalizeSourceUrl(rawUrl)
+  if (!value.trim()) throw new Error("A source URL is required.")
 
   let url: URL
   try {

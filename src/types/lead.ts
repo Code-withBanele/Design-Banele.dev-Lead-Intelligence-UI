@@ -57,6 +57,8 @@ export type CreateLeadInput = {
 
   location?: string
 
+  websiteUrl?: string
+
   status?: LeadStatus
 }
 

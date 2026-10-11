@@ -1,3 +1,5 @@
+import { normalizeSourceUrl, validateSafeUrl } from "./safeHttp.js"
+
 export const LEAD_STATUSES = [
   "NEW",
 
@@ -29,6 +31,8 @@ export type CreateLeadInput = {
 
   location?: string
 
+  websiteUrl?: string
+
   status?: LeadStatus
 }
 
@@ -51,12 +55,18 @@ export function normalizeLeadInput(input: CreateLeadInput) {
     throw new Error("Invalid lead status.")
   }
 
+  const websiteUrl = input.websiteUrl?.trim()
+
+  const normalizedWebsiteUrl = websiteUrl ? validateSafeUrl(normalizeSourceUrl(websiteUrl)) : null
+
   return {
     name,
 
     industry: input.industry?.trim() || "",
 
     location: input.location?.trim() || "",
+
+    ...(normalizedWebsiteUrl ? { websiteUrl: normalizedWebsiteUrl } : {}),
 
     status: normalizedStatus,
   }

@@ -10,6 +10,12 @@ export async function getLead(id: string): Promise<Lead> {
   return fetchJson<Lead>(`/leads/${id}`)
 }
 
+export async function getLeadShortlist(): Promise<
+  { generatedAt: string; count: number; recommendations: Array<Record<string, unknown>> }
+> {
+  return fetchJson(`/leads/shortlist`)
+}
+
 export async function createLead(input: CreateLeadInput): Promise<Lead> {
   return fetchJson<Lead>(`/leads`, {
     method: "POST",

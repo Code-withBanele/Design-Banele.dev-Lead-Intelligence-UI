@@ -20,6 +20,8 @@ test("normalizes a new lead input from the current UI fields", () => {
 
     location: "Cape Town",
 
+    websiteUrl: "example.com",
+
     status: "NEW",
   })
 
@@ -29,6 +31,8 @@ test("normalizes a new lead input from the current UI fields", () => {
     industry: "SaaS",
 
     location: "Cape Town",
+
+    websiteUrl: "https://example.com",
 
     status: "NEW",
   })
